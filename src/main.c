@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <stdint.h>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -18,25 +17,27 @@
 
 
 int main(int argc, char *argv[]) {
-    int sock, err;
+    int sock, err, domain;
     struct addrinfo hints = {0}, *res = NULL;
-    uint8_t bind_addr[INET6_ADDRSTRLEN];
+    char bind_addr[INET6_ADDRSTRLEN];
     in_port_t bind_port;
+    ssize_t nbytes;
     #ifdef CAP_FOUND
     cap_t caps;
     cap_value_t cap_list[1] = { CAP_NET_BIND_SERVICE };
     cap_flag_value_t privileged;
     #endif
 
+    domain = AF_INET; /* TODO: read this from CLI opts via getopt */
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
-    if ((sock = socket(AF_INET6, SOCK_DGRAM, 0)) == -1) {
+    if ((sock = socket(domain, SOCK_DGRAM, 0)) == -1) {
         fprintf(stderr, "{\"message\": \"Failed to create server socket\", \"error\": \"%s\"}\n", strerror(errno));
         return 1;
     }
     fprintf(stderr, "{\"message\": \"Successfully created server socket\", \"fd\": %d}\n", sock);
 
-    hints.ai_family = AF_INET6,
+    hints.ai_family = domain,
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
     fprintf(stderr, "{\"message\": \"Retrieving bind address...\"}\n");
@@ -133,6 +134,10 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "{\"message\": \"Failed to permanently drop privileges\", \"error\": \"%s\"}\n", strerror(errno));
         close(sock);
         return 1;
+    }
+
+    while (1) {
+        //nbytes = recvfrom(sock, )
     }
 
 
