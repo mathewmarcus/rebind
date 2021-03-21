@@ -22,8 +22,11 @@ int main(int argc, char *argv[]) {
     struct addrinfo hints = {0}, *res = NULL;
     uint8_t bind_addr[INET6_ADDRSTRLEN];
     in_port_t bind_port;
+    #ifdef CAP_FOUND
     cap_t caps;
     cap_value_t cap_list[1] = { CAP_NET_BIND_SERVICE };
+    cap_flag_value_t privileged;
+    #endif
 
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
@@ -66,20 +69,35 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if (cap_set_flag(caps, CAP_EFFECTIVE, 1, cap_list, CAP_SET) == -1) {
-        fprintf(stderr, "{\"message\": \"Failed to set cap flag\", \"error\": \"%s\"}\n", strerror(errno));
+    /*
+        No need to raise capailities in either of the following cases:
+            * file effective bit is already sit (e.g. setcap "cap_net_bind_service=ep")
+            * file is setuid root (all permitted, inheritable, and effective capabilities bits will already be set)
+    */
+    if (cap_get_flag(caps, cap_list[0], CAP_EFFECTIVE, &privileged)) {
+        fprintf(stderr, "{\"message\": \"Failed to check if CAP_NET_BIND_SERVICE is effective\", \"error\": \"%s\"}\n", strerror(errno));
         cap_free(caps);
         freeaddrinfo(res);
         close(sock);
         return 1;
     }
 
-    if (cap_set_proc(caps) == -1) {
-        fprintf(stderr, "{\"message\": \"Failed to enable CAP_NET_BIND_SERVICE\", \"error\": \"%s\"}\n", strerror(errno));
-        cap_free(caps);
-        freeaddrinfo(res);
-        close(sock);
-        return 1;
+    if (privileged == CAP_CLEAR) {
+        if (cap_set_flag(caps, CAP_EFFECTIVE, 1, cap_list, CAP_SET) == -1) {
+            fprintf(stderr, "{\"message\": \"Failed to set cap flag\", \"error\": \"%s\"}\n", strerror(errno));
+            cap_free(caps);
+            freeaddrinfo(res);
+            close(sock);
+            return 1;
+        }
+
+        if (cap_set_proc(caps) == -1) {
+            fprintf(stderr, "{\"message\": \"Failed to enable CAP_NET_BIND_SERVICE\", \"error\": \"%s\"}\n", strerror(errno));
+            cap_free(caps);
+            freeaddrinfo(res);
+            close(sock);
+            return 1;
+        }
     }
     cap_free(caps);
     #endif
