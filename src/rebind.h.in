@@ -1,6 +1,10 @@
+#ifndef REBIND_H
+#define REBIND_H
+
 #cmakedefine CAP_FOUND
 
 #include <stdint.h>
+#include "_rebind_rr.h"
 
 /* https://tools.ietf.org/html/rfc1035#section-2.3.4 */
 #define BUFLEN 512 
@@ -55,3 +59,4 @@ struct dns_hdr {
     uint16_t nscount;
     uint16_t arcount;
 };
+#endif

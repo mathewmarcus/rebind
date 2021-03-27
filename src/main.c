@@ -91,18 +91,21 @@ int main(int argc, char *argv[]) {
     struct sockaddr *addr;
     socklen_t addrlen, recv_addrlen;
     struct dns_hdr *query_hdr = (struct dns_hdr *) query_buf, *res_hdr = (struct dns_hdr *) res_buf;
+    struct rr rr_list = { 0 };
     #ifdef CAP_FOUND
     cap_t caps;
     cap_value_t cap_list[1] = { CAP_NET_BIND_SERVICE };
     cap_flag_value_t privileged;
     #endif
 
-    if (argc != 5) {
-        fprintf(stderr, "Usage: %s ${DOMAIN_NAME} ${LEGIT_IP} ${RESERVED_IP} ${HOST_IP}\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n", argv[0]);
         return 1;
     }
 
     addr_family = AF_INET; /* TODO: read this from CLI opts via getopt */
+
+    return load_resource_records(argv[2], addr_family, &rr_list);
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
     if ((sock = socket(addr_family, SOCK_DGRAM, 0)) == -1) {
