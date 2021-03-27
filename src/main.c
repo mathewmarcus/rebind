@@ -114,6 +114,7 @@ int main(int argc, char *argv[]) {
 
     if (!(rr_list = new_rr(argv[1], argv[3], addr_family))) /* Put base domain in front of list */
         return 1;
+    rr_list->subdomain_len = 0;
     
     if (load_resource_records(argv[2], addr_family, rr_list) == -1)
         return 1;
@@ -377,7 +378,7 @@ int main(int argc, char *argv[]) {
             switch (htons(*((uint16_t *)query_ptr))) {
                 case A:
                     res_hdr->ancount = htons(0x0001);
-                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + strlen(query_name));
+                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
                     record_data_ptr = (uint8_t *)&message_ref;
                     record_len = 2;
                     memcpy(res_ptr, record_data_ptr, record_len);

@@ -117,6 +117,7 @@ static int add_rr(struct rr *root, char *name, const char *target, const int ai_
     else if (!root->next) { /* We've reached the end of the list, add the new resource record */
         if (!(n = new_rr(name, target, ai_family)))
             return -1;
+        n->subdomain_len = strlen(name) + 1;
         root->next = n;
         return 0;
     }

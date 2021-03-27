@@ -14,6 +14,7 @@ struct rr {
     } target;
     int use_restricted;
     struct rr *next;
+    size_t subdomain_len;
 };
 
 struct rr *new_rr(char *name, const char *target, const int ai_family);
