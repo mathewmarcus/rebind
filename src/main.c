@@ -490,6 +490,7 @@ int main(int argc, char *argv[]) {
         sendto(sock, res_buf, res_nbytes, 0, addr, recv_addrlen);
     }
 
+    free_rr_list(rr_list);
     free(base_name_label);
     free(addr);
     close(sock);

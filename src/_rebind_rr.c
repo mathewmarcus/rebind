@@ -8,7 +8,6 @@
 #include "_rebind_rr.h"
 
 
-void free_rr_list(struct rr *root);
 static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const int ai_family);
 static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, size_t target_len, const char *format_str, struct rr *rr_list);
 
