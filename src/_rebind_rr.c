@@ -131,14 +131,14 @@ static int add_rr(struct rr *root, char *name, const char *target, const uint32_
         return add_rr(root->next, name, target, ttl, ai_family);
 }
 
-struct rr *find_subdomain_rr(const char *name, struct rr *root) {
+struct rr *find_subdomain_rr(const char *name, const size_t len, struct rr *root) {
     if (!root)
         return NULL;
 
-    if (!strncasecmp(name, root->name, root->subdomain_len - 1))
+    if (len == root->subdomain_len && !strncasecmp(name, root->name, root->subdomain_len - 1))
         return root;
 
-    return find_subdomain_rr(name, root->next);
+    return find_subdomain_rr(name, len, root->next);
 }
 
  void free_rr_list(struct rr *root) {
@@ -162,5 +162,5 @@ struct rr *find_rr(const char *query_name, const size_t query_name_len, const si
     if (domain[base_name_len] || query_name[query_name_len - base_name_len - 1] != '.') {
         return NULL;
     }
-    return find_subdomain_rr(query_name, root);
+    return find_subdomain_rr(query_name, query_name_len-base_name_len, root);
 }

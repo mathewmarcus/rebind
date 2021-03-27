@@ -279,7 +279,6 @@ int main(int argc, char *argv[]) {
         res_hdr->rd = query_hdr->rd;
 
         nbytes = parse_query_name(query_name, query_ptr, fmin(nbytes, MAX_NAME_LEN), &err);
-        fprintf(stderr, "%s: %lu\n", query_name, nbytes);
         if (err) {
             res_hdr->rcode = rcode_format_error;
             fprintf(stderr, "{\"message\": \"Invalid DNS query: format error (name too long)\", \"server_ip\": \"%s\", \"server_port\": %hu, \"fd\": %d, \"client_ip\": \"%s\", \"client_port\": %hu}\n",
@@ -372,7 +371,6 @@ int main(int argc, char *argv[]) {
             Build Authoriative section            
         */
         res_hdr->nscount = htons(0x0001);
-        fprintf(stderr, "label len: %lu\n", record_len);
         memcpy(res_ptr, record_data_ptr, record_len);
         res_nbytes += record_len;
         if (record_len > 2) {
@@ -403,7 +401,7 @@ int main(int argc, char *argv[]) {
         /*
             Build Additional section
         */
-        if ((rr = find_subdomain_rr("ns1", rr_list))) {
+        if ((rr = find_subdomain_rr("ns1", 3, rr_list))) {
             res_hdr->arcount = htons(0x0001);
             message_ref = htons(((3 << 6) << 8) | (res_ptr - res_buf));
             record_data_ptr = (uint8_t *)&message_ref;
