@@ -333,7 +333,15 @@ int main(int argc, char *argv[]) {
                     *((uint16_t *)res_ptr) = htons(ai_addrlen);
                     res_ptr +=2 ;
                     res_nbytes += 2;
-                    rr->use_restricted ? memcpy(res_ptr, &rr->target, ai_addrlen) : memcpy(res_ptr, &rr_list->target, ai_addrlen);
+                    if (rr->use_restricted) {
+                         memcpy(res_ptr, &rr->target, ai_addrlen);
+                         inet_ntop(addr_family, &rr->target, remote_addr, INET6_ADDRSTRLEN);
+                    }
+                    else {
+                         memcpy(res_ptr, &rr_list->target, ai_addrlen);
+                         inet_ntop(addr_family, &rr_list->target, remote_addr, INET6_ADDRSTRLEN);
+                    }
+                    fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
                     res_ptr += ai_addrlen;
                     res_nbytes += ai_addrlen;
 
@@ -401,7 +409,7 @@ int main(int argc, char *argv[]) {
         /*
             Build Additional section
         */
-        if ((rr = find_subdomain_rr("ns1", 3, rr_list))) {
+        if ((rr = find_subdomain_rr("ns1", 4, rr_list))) {
             res_hdr->arcount = htons(0x0001);
             message_ref = htons(((3 << 6) << 8) | (res_ptr - res_buf));
             record_data_ptr = (uint8_t *)&message_ref;
