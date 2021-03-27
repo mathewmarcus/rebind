@@ -12,10 +12,6 @@
 
 #include "rebind.h"
 
-#ifdef CAP_FOUND
-#include <sys/capability.h>
-#endif
-
 void unparse_query_name(const char domain_name[], uint8_t *ns_record, size_t len, size_t label_len) {
     if (!len) {
         ns_record[0] = label_len;
@@ -91,11 +87,6 @@ int main(int argc, char *argv[]) {
     socklen_t addrlen, recv_addrlen;
     struct dns_hdr *query_hdr = (struct dns_hdr *) query_buf, *res_hdr = (struct dns_hdr *) res_buf;
     struct rr *rr_list, *rr;
-    #ifdef CAP_FOUND
-    cap_t caps;
-    cap_value_t cap_list[1] = { CAP_NET_BIND_SERVICE };
-    cap_flag_value_t privileged;
-    #endif
 
     if (argc != 4) {
         fprintf(stderr, "Usage: %s ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n", argv[0]);
@@ -111,9 +102,6 @@ int main(int argc, char *argv[]) {
             ai_addrlen = sizeof(struct in6_addr);
             break;
     }
-    
-    if (load_resource_records(argv[2], addr_family, argv[1], argv[3], &rr_list) == -1)
-        return 1;
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
     if ((sock = socket(addr_family, SOCK_DGRAM, 0)) == -1) {
@@ -149,44 +137,10 @@ int main(int argc, char *argv[]) {
     addrlen = res->ai_addrlen;
 
     #ifdef CAP_FOUND
-    if (!(caps = cap_get_proc())) {
-        fprintf(stderr, "{\"message\": \"Failed to allocate space for process capabilities\", \"error\": \"%s\"}\n", strerror(errno));
+    if (raise_privs()) {
         freeaddrinfo(res);
         close(sock);
-        return 1;
     }
-
-    /*
-        No need to raise capailities in either of the following cases:
-            * file effective bit is already sit (e.g. setcap "cap_net_bind_service=ep")
-            * file is setuid root (all permitted, inheritable, and effective capabilities bits will already be set)
-    */
-    if (cap_get_flag(caps, cap_list[0], CAP_EFFECTIVE, &privileged)) {
-        fprintf(stderr, "{\"message\": \"Failed to check if CAP_NET_BIND_SERVICE is effective\", \"error\": \"%s\"}\n", strerror(errno));
-        cap_free(caps);
-        freeaddrinfo(res);
-        close(sock);
-        return 1;
-    }
-
-    if (privileged == CAP_CLEAR) {
-        if (cap_set_flag(caps, CAP_EFFECTIVE, 1, cap_list, CAP_SET) == -1) {
-            fprintf(stderr, "{\"message\": \"Failed to set cap flag\", \"error\": \"%s\"}\n", strerror(errno));
-            cap_free(caps);
-            freeaddrinfo(res);
-            close(sock);
-            return 1;
-        }
-
-        if (cap_set_proc(caps) == -1) {
-            fprintf(stderr, "{\"message\": \"Failed to enable CAP_NET_BIND_SERVICE\", \"error\": \"%s\"}\n", strerror(errno));
-            cap_free(caps);
-            freeaddrinfo(res);
-            close(sock);
-            return 1;
-        }
-    }
-    cap_free(caps);
     #endif
 
     fprintf(stderr, "{\"message\": \"Binding server socket to address...\", \"ip\": \"%s\", \"port\": %hu, \"fd\": %d}\n", bind_addr, bind_port, sock);
@@ -199,25 +153,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "{\"message\": \"Successfully bound server socket to address\", \"ip\": \"%s\", \"port\": %hu, \"fd\": %d}\n", bind_addr, bind_port, sock);
     freeaddrinfo(res);
 
-    #ifdef CAP_FOUND
-    if (!(caps = cap_init())) {
-        fprintf(stderr, "{\"message\": \"Failed to allocate space for process capabilities\", \"error\": \"%s\"}\n", strerror(errno));
-        close(sock);
-        return 1;
-    }
-
-    if (cap_set_proc(caps) == -1) {
-        fprintf(stderr, "{\"message\": \"Failed to drop process capabilities\", \"error\": \"%s\"}\n", strerror(errno));
-        cap_free(caps);
-        close(sock);
-        return 1;
-    }
-    cap_free(caps);
-    #endif
-
-
-    if (setuid(getuid()) == -1) {
-        fprintf(stderr, "{\"message\": \"Failed to permanently drop privileges\", \"error\": \"%s\"}\n", strerror(errno));
+    if (drop_privs()) {
         close(sock);
         return 1;
     }
@@ -230,11 +166,17 @@ int main(int argc, char *argv[]) {
 
     if ((base_name_label_len = build_labeled_record(argv[1], &base_name_label)) == -1) {
         fprintf(stderr, "{\"message\": \"Failed to allocate buffer for labeled base domain record\", \"error\": \"%s\"}\n", strerror(errno));
+        free(addr);
         close(sock);
         return 1;
     }
-    record_data_ptr = base_name_label;
-    record_len = base_name_label_len;
+    
+    if (load_resource_records(argv[2], addr_family, argv[1], argv[3], &rr_list) == -1) {
+        free(base_name_label);
+        free(addr);
+        close(sock);
+        return 1;
+    }
 
     res_hdr->qr = msg_response;
     res_hdr->aa = 1;
@@ -374,7 +316,7 @@ int main(int argc, char *argv[]) {
             switch (htons(*((uint16_t *)query_ptr))) {
                 case A:
                     res_hdr->ancount = htons(0x0001);
-                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
+                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
                     record_data_ptr = (uint8_t *)&message_ref;
                     record_len = 2;
                     memcpy(res_ptr, record_data_ptr, record_len);
@@ -397,6 +339,8 @@ int main(int argc, char *argv[]) {
                     res_nbytes += ai_addrlen;
 
                     rr->use_restricted = !rr->use_restricted;
+                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
+                    record_data_ptr = (uint8_t *)&message_ref;
                     break;
                 /* TODO
                 case AAAA:

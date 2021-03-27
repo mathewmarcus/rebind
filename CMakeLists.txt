@@ -11,14 +11,15 @@ else()
     set(CAP_FOUND FALSE)
 endif()
 
-add_library(_rebind_rr OBJECT src/_rebind_rr.h src/_rebind_rr.c)
+configure_file(src/_rebind_privs.h.in ${CMAKE_SOURCE_DIR}/src/_rebind_privs.h @ONLY)
 
-configure_file(src/rebind.h.in ${CMAKE_SOURCE_DIR}/src/rebind.h @ONLY)
+add_library(_rebind_rr OBJECT src/_rebind_rr.h src/_rebind_rr.c)
+add_library(_rebind_privs OBJECT src/_rebind_privs.h src/_rebind_privs.c)
 
 add_executable(rebind src/main.c)
 
 if (CAP_FOUND)
-    target_link_libraries(rebind ${LIBCAP} m _rebind_rr)
+    target_link_libraries(rebind ${LIBCAP} m _rebind_rr _rebind_privs)
     install(TARGETS rebind RUNTIME)
     install(CODE "execute_process(COMMAND setcap \"cap_net_bind_service=p\" ${CMAKE_INSTALL_PREFIX}/bin/rebind)")
 else()
