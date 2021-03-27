@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -81,17 +79,18 @@ ssize_t build_labeled_record(const char domain_name[], uint8_t **ns_record) {
 
 
 int main(int argc, char *argv[]) {
-    int sock, err, addr_family, use_reserved = 0;
+    int sock, err, addr_family;
     struct addrinfo hints = {0}, *res = NULL;
     char bind_addr[INET6_ADDRSTRLEN], remote_addr[INET6_ADDRSTRLEN], query_name[MAX_NAME_LEN];
     in_port_t bind_port, remote_port;
-    ssize_t nbytes, res_nbytes, base_name_label_len, record_len;
+    size_t ai_addrlen;
+    ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
     uint8_t query_buf[BUFLEN], res_buf[BUFLEN], *query_ptr, *res_ptr, *base_name_label, *record_data_ptr;
     uint16_t message_ref;
     struct sockaddr *addr;
     socklen_t addrlen, recv_addrlen;
     struct dns_hdr *query_hdr = (struct dns_hdr *) query_buf, *res_hdr = (struct dns_hdr *) res_buf;
-    struct rr rr_list = { 0 };
+    struct rr *rr_list, *rr;
     #ifdef CAP_FOUND
     cap_t caps;
     cap_value_t cap_list[1] = { CAP_NET_BIND_SERVICE };
@@ -102,10 +101,22 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Usage: %s ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n", argv[0]);
         return 1;
     }
-
+    base_name_len = strlen(argv[1]);
     addr_family = AF_INET; /* TODO: read this from CLI opts via getopt */
+    switch (addr_family) {
+        case AF_INET:
+            ai_addrlen = sizeof(struct in_addr);
+            break;
+        case AF_INET6:
+            ai_addrlen = sizeof(struct in6_addr);
+            break;
+    }
 
-    return load_resource_records(argv[2], addr_family, &rr_list);
+    if (!(rr_list = new_rr(argv[1], argv[3], addr_family))) /* Put base domain in front of list */
+        return 1;
+    
+    if (load_resource_records(argv[2], addr_family, rr_list) == -1)
+        return 1;
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
     if ((sock = socket(addr_family, SOCK_DGRAM, 0)) == -1) {
@@ -353,9 +364,9 @@ int main(int argc, char *argv[]) {
                 sock,
                 remote_addr,
                 remote_port);
-        if (strcasecmp(query_name + 1, argv[1])) { /* TODO support subdomains */
+        if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, rr_list))) { /* TODO support subdomains */
+            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\"}\n", query_name + 1, rr_list->name);
             res_hdr->rcode = rcode_name_error;
-            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"domain_name\": \"%s\"}\n", query_name + 1);
             goto authoritative_rr;
         } else {
             fprintf(stderr, " \"domain_name\": \"%s\",", query_ptr);
@@ -366,7 +377,7 @@ int main(int argc, char *argv[]) {
             switch (htons(*((uint16_t *)query_ptr))) {
                 case A:
                     res_hdr->ancount = htons(0x0001);
-                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
+                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + strlen(query_name));
                     record_data_ptr = (uint8_t *)&message_ref;
                     record_len = 2;
                     memcpy(res_ptr, record_data_ptr, record_len);
@@ -381,14 +392,14 @@ int main(int argc, char *argv[]) {
                     *((uint32_t *)res_ptr) = htonl(0x00000001);
                     res_ptr += 4;
                     res_nbytes += 4;
-                    *((uint16_t *)res_ptr) = htons(0x0004);
+                    *((uint16_t *)res_ptr) = htons(ai_addrlen);
                     res_ptr +=2 ;
                     res_nbytes += 2;
-                    use_reserved ? inet_pton(AF_INET, argv[3], res_ptr) : inet_pton(AF_INET, argv[2], res_ptr);
-                    res_ptr += 4;
-                    res_nbytes += 4;
+                    rr->use_restricted ? memcpy(res_ptr, &rr->target, ai_addrlen) : memcpy(res_ptr, &rr_list->target, ai_addrlen);
+                    res_ptr += ai_addrlen;
+                    res_nbytes += ai_addrlen;
 
-                    use_reserved = !use_reserved;
+                    rr->use_restricted = !rr->use_restricted;
                     break;
                 /* TODO
                 case AAAA:
@@ -423,7 +434,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "label len: %lu\n", record_len);
         memcpy(res_ptr, record_data_ptr, record_len);
         res_nbytes += record_len;
-
         if (record_len > 2) {
             message_ref = htons(((3 << 6) << 8) | res_ptr - res_buf);
             res_ptr += record_len;
@@ -472,7 +482,7 @@ int main(int argc, char *argv[]) {
         *((uint16_t *)res_ptr) = htons(0x0004);
         res_ptr += 2;
         res_nbytes += 2;
-        inet_pton(AF_INET, argv[4], res_ptr);
+        inet_pton(AF_INET, argv[3], res_ptr);
         res_ptr += 4;
         res_nbytes += 4;
 

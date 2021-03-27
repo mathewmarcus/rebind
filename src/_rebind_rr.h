@@ -16,6 +16,7 @@ struct rr {
     struct rr *next;
 };
 
-int add_rr(struct rr *root, char *name, const char *target, const int ai_family);
-ssize_t load_resource_records(const char *filename, const int ai_family, struct rr *rr_list);
+struct rr *new_rr(char *name, const char *target, const int ai_family);
+struct rr *find_rr(char *query_name, const size_t query_name_len, size_t base_name_len, struct rr *root);
+int load_resource_records(const char *filename, const int ai_family, struct rr *rr_list);
 #endif
