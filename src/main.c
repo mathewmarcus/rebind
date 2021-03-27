@@ -386,7 +386,7 @@ int main(int argc, char *argv[]) {
                     *((uint16_t *)res_ptr) = htons(0x0001);
                     res_ptr +=2;
                     res_nbytes += 2;
-                    *((uint32_t *)res_ptr) = htonl(0x00000001);
+                    *((uint32_t *)res_ptr) = htonl(rr->ttl);
                     res_ptr += 4;
                     res_nbytes += 4;
                     *((uint16_t *)res_ptr) = htons(ai_addrlen);
@@ -446,7 +446,7 @@ int main(int argc, char *argv[]) {
         *((uint16_t *)res_ptr) = htons(0x0001);
         res_ptr +=2;
         res_nbytes += 2;
-        *((uint32_t *)res_ptr) = htonl(0x00000001);
+        *((uint32_t *)res_ptr) = htonl(3600);
         res_ptr += 4;
         res_nbytes += 4;
         *((uint16_t *)res_ptr) = htons(0x0006);
@@ -474,7 +474,7 @@ int main(int argc, char *argv[]) {
             *((uint16_t *)res_ptr) = htons(0x0001);
             res_ptr +=2;
             res_nbytes += 2;
-            *((uint32_t *)res_ptr) = htonl(0x00000001);
+            *((uint32_t *)res_ptr) = htonl(rr->ttl);
             res_ptr += 4;
             res_nbytes += 4;
             *((uint16_t *)res_ptr) = htons(ai_addrlen);

@@ -9,7 +9,7 @@
 
 
 void free_rr_list(struct rr *root);
-static int add_rr(struct rr *root, char *name, const char *target, const int ai_family);
+static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const int ai_family);
 static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, size_t target_len, const char *format_str, struct rr *rr_list);
 
 int load_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, struct rr **rr_list) {
@@ -18,11 +18,11 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
     size_t target_len;
     char *name, *target, format_str[13];
 
-    if (!(*rr_list = new_rr(domain, host_ip, ai_family))) /* Put base domain in front of list */
+    if (!(*rr_list = new_rr(domain, host_ip, 60, ai_family))) /* Put base domain in front of list */
         return 1;
     (*rr_list)->subdomain_len = 0;
 
-    if (add_rr(*rr_list, "ns1", host_ip, ai_family) == -1) /* Add ns1 (nameserver) to list */
+    if (add_rr(*rr_list, "ns1", host_ip, 60, ai_family) == -1) /* Add ns1 (nameserver) to list */
         return 1;
 
     switch (ai_family) {
@@ -80,7 +80,7 @@ static int read_resource_records(FILE *file, const int ai_family, char *name, ch
     }
     else {
         fprintf(stderr, "{\"message\": \"Adding resource record to list...\", \"ai_family\": \"%d\", \"name\": \"%s\", \"target\": \"%s\"}\n", ai_family, name, target);
-        if (add_rr(rr_list, name, target, ai_family) == -1) {
+        if (add_rr(rr_list, name, target, 1, ai_family) == -1) {
             return -1;
         }
         fprintf(stderr, "{\"message\": \"Added resource record to list\", \"ai_family\": \"%d\", \"name\": \"%s\", \"target\": \"%s\"}\n", ai_family, name, target);
@@ -89,7 +89,7 @@ static int read_resource_records(FILE *file, const int ai_family, char *name, ch
     }
 }
 
-struct rr *new_rr(char *name, const char *target, const int ai_family) {
+struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const int ai_family) {
     struct rr *n;
 
     if (!(n = malloc(sizeof(struct rr)))) {
@@ -105,12 +105,13 @@ struct rr *new_rr(char *name, const char *target, const int ai_family) {
     n->use_restricted = 0;
     n->next = NULL;
     n->subdomain_len = strlen(name) + 1;
+    n->ttl = ttl;
     return n;
 }
 
 
 /* This is idempotent */
-static int add_rr(struct rr *root, char *name, const char *target, const int ai_family) {
+static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const int ai_family) {
     struct rr *n;
 
     if (root->name == name) /* This resource record already exists, update target addr */ {
@@ -122,13 +123,13 @@ static int add_rr(struct rr *root, char *name, const char *target, const int ai_
         return 0;
     }
     else if (!root->next) { /* We've reached the end of the list, add the new resource record */
-        if (!(n = new_rr(name, target, ai_family)))
+        if (!(n = new_rr(name, target, ttl, ai_family)))
             return -1;
         root->next = n;
         return 0;
     }
     else /* Not at the end of the list yet, continue traversing */
-        return add_rr(root->next, name, target, ai_family);
+        return add_rr(root->next, name, target, ttl, ai_family);
 }
 
 struct rr *find_subdomain_rr(const char *name, struct rr *root) {
@@ -150,7 +151,7 @@ struct rr *find_subdomain_rr(const char *name, struct rr *root) {
     return;
 }
 
-struct rr *find_rr(const char *query_name, const size_t query_name_len, size_t base_name_len, struct rr *root) {
+struct rr *find_rr(const char *query_name, const size_t query_name_len, const size_t base_name_len, struct rr *root) {
     char *domain;
 
     if (!strcasecmp(query_name, root->name))
