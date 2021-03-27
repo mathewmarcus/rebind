@@ -9,15 +9,21 @@
 
 
 void free_rr_list(struct rr *root);
-static struct rr *find_subdomain_rr(const char *name, struct rr *root);
 static int add_rr(struct rr *root, char *name, const char *target, const int ai_family);
 static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, size_t target_len, const char *format_str, struct rr *rr_list);
 
-int load_resource_records(const char *filename, const int ai_family, struct rr *rr_list) {
+int load_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, struct rr **rr_list) {
     FILE *f;
     int ret;
     size_t target_len;
     char *name, *target, format_str[13];
+
+    if (!(*rr_list = new_rr(domain, host_ip, ai_family))) /* Put base domain in front of list */
+        return 1;
+    (*rr_list)->subdomain_len = 0;
+
+    if (add_rr(*rr_list, "ns1", host_ip, ai_family) == -1) /* Add ns1 (nameserver) to list */
+        return 1;
 
     switch (ai_family) {
         case AF_INET:
@@ -46,7 +52,7 @@ int load_resource_records(const char *filename, const int ai_family, struct rr *
         return -1;
     }
 
-    ret = read_resource_records(f, ai_family, name, target, target_len, format_str, rr_list);
+    ret = read_resource_records(f, ai_family, name, target, target_len, format_str, *rr_list);
 
     free(target);
     fclose(f);
@@ -98,6 +104,7 @@ struct rr *new_rr(char *name, const char *target, const int ai_family) {
     n->name = name;
     n->use_restricted = 0;
     n->next = NULL;
+    n->subdomain_len = strlen(name) + 1;
     return n;
 }
 
@@ -117,7 +124,6 @@ static int add_rr(struct rr *root, char *name, const char *target, const int ai_
     else if (!root->next) { /* We've reached the end of the list, add the new resource record */
         if (!(n = new_rr(name, target, ai_family)))
             return -1;
-        n->subdomain_len = strlen(name) + 1;
         root->next = n;
         return 0;
     }
@@ -125,11 +131,11 @@ static int add_rr(struct rr *root, char *name, const char *target, const int ai_
         return add_rr(root->next, name, target, ai_family);
 }
 
-static struct rr *find_subdomain_rr(const char *name, struct rr *root) {
+struct rr *find_subdomain_rr(const char *name, struct rr *root) {
     if (!root)
         return NULL;
 
-    if (!strcasecmp(name, root->name))
+    if (!strncasecmp(name, root->name, root->subdomain_len - 1))
         return root;
 
     return find_subdomain_rr(name, root->next);
@@ -144,7 +150,7 @@ static struct rr *find_subdomain_rr(const char *name, struct rr *root) {
     return;
 }
 
-struct rr *find_rr(char *query_name, const size_t query_name_len, size_t base_name_len, struct rr *root) {
+struct rr *find_rr(const char *query_name, const size_t query_name_len, size_t base_name_len, struct rr *root) {
     char *domain;
 
     if (!strcasecmp(query_name, root->name))
@@ -153,13 +159,8 @@ struct rr *find_rr(char *query_name, const size_t query_name_len, size_t base_na
     if (!(domain = strcasestr(query_name, root->name))) {
         return NULL;
     }
-    fprintf(stderr, "domain: %s\n", domain);
-    fprintf(stderr, "domain[base_name_len]: %c\n", domain[base_name_len]);
     if (domain[base_name_len] || query_name[query_name_len - base_name_len - 1] != '.') {
         return NULL;
     }
-    fprintf(stderr, "HERE: %s\n", query_name);
-    query_name[query_name_len - base_name_len - 1] = '\0';
-    fprintf(stderr, "HERE: %s\n", query_name);
     return find_subdomain_rr(query_name, root);
 }

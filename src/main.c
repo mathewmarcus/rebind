@@ -111,12 +111,8 @@ int main(int argc, char *argv[]) {
             ai_addrlen = sizeof(struct in6_addr);
             break;
     }
-
-    if (!(rr_list = new_rr(argv[1], argv[3], addr_family))) /* Put base domain in front of list */
-        return 1;
-    rr_list->subdomain_len = 0;
     
-    if (load_resource_records(argv[2], addr_family, rr_list) == -1)
+    if (load_resource_records(argv[2], addr_family, argv[1], argv[3], &rr_list) == -1)
         return 1;
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
@@ -370,7 +366,7 @@ int main(int argc, char *argv[]) {
             res_hdr->rcode = rcode_name_error;
             goto authoritative_rr;
         } else {
-            fprintf(stderr, " \"domain_name\": \"%s\",", query_ptr);
+            fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
             query_ptr += (1 + nbytes + 1); /* skip past the trailing null byte*/
 
             // Compression label
@@ -463,29 +459,33 @@ int main(int argc, char *argv[]) {
         /*
             Build Additional section
         */
-        res_hdr->arcount = htons(0x0001);
-        message_ref = htons(((3 << 6) << 8) | (res_ptr - res_buf));
-        record_data_ptr = (uint8_t *)&message_ref;
-        res_ptr += 6;
-        res_nbytes += 6;
-        memcpy(res_ptr, record_data_ptr, record_len);
-        res_ptr += 2;
-        res_nbytes += 2;
-        *((uint16_t *)res_ptr) = htons(A);
-        res_ptr +=2;
-        res_nbytes += 2;
-        *((uint16_t *)res_ptr) = htons(0x0001);
-        res_ptr +=2;
-        res_nbytes += 2;
-        *((uint32_t *)res_ptr) = htonl(0x00000001);
-        res_ptr += 4;
-        res_nbytes += 4;
-        *((uint16_t *)res_ptr) = htons(0x0004);
-        res_ptr += 2;
-        res_nbytes += 2;
-        inet_pton(AF_INET, argv[3], res_ptr);
-        res_ptr += 4;
-        res_nbytes += 4;
+        if ((rr = find_subdomain_rr("ns1", rr_list))) {
+            res_hdr->arcount = htons(0x0001);
+            message_ref = htons(((3 << 6) << 8) | (res_ptr - res_buf));
+            record_data_ptr = (uint8_t *)&message_ref;
+            res_ptr += 6;
+            res_nbytes += 6;
+            memcpy(res_ptr, record_data_ptr, record_len);
+            res_ptr += 2;
+            res_nbytes += 2;
+            *((uint16_t *)res_ptr) = htons(A);
+            res_ptr +=2;
+            res_nbytes += 2;
+            *((uint16_t *)res_ptr) = htons(0x0001);
+            res_ptr +=2;
+            res_nbytes += 2;
+            *((uint32_t *)res_ptr) = htonl(0x00000001);
+            res_ptr += 4;
+            res_nbytes += 4;
+            *((uint16_t *)res_ptr) = htons(ai_addrlen);
+            res_ptr += 2;
+            res_nbytes += 2;
+            memcpy(res_ptr, &rr->target, ai_addrlen);
+            res_ptr += ai_addrlen;
+            res_nbytes += ai_addrlen;
+        }
+        else
+            res_nbytes += 6;
 
         sendto(sock, res_buf, res_nbytes, 0, addr, recv_addrlen);
     }
