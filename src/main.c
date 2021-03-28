@@ -77,9 +77,9 @@ ssize_t build_labeled_record(const char domain_name[], uint8_t **ns_record) {
 int main(int argc, char *argv[]) {
     int sock, err, addr_family = AF_INET;
     struct addrinfo hints = {0}, *res = NULL;
-    char bind_addr[INET6_ADDRSTRLEN], remote_addr[INET6_ADDRSTRLEN], query_name[MAX_NAME_LEN];
+    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr;
     in_port_t bind_port, remote_port;
-    size_t ai_addrlen;
+    size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN;
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
     uint8_t query_buf[BUFLEN], res_buf[BUFLEN], *query_ptr, *res_ptr, *base_name_label, *record_data_ptr;
     uint16_t message_ref;
@@ -106,6 +106,8 @@ int main(int argc, char *argv[]) {
             break;
         case '6':
             addr_family = AF_INET6;
+            ai_addrlen = sizeof(struct in6_addr);
+            str_addrlen = INET6_ADDRSTRLEN;
             break;
         case '?':
             fprintf(stderr, USAGE, argv[0]);
@@ -116,15 +118,15 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, USAGE, argv[0]);
         return 1;
     }
-    base_name_len = strlen(argv[optind]);
-    switch (addr_family) {
-        case AF_INET:
-            ai_addrlen = sizeof(struct in_addr);
-            break;
-        case AF_INET6:
-            ai_addrlen = sizeof(struct in6_addr);
-            break;
+
+    if (!(bind_addr = malloc(str_addrlen)))
+        return 1;
+    if (!(remote_addr = malloc(str_addrlen))) {
+        free(bind_addr);
+        return 1;
     }
+
+    base_name_len = strlen(argv[optind]);
 
     fprintf(stderr, "{\"message\": \"Creating server socket...\"}\n");
     if ((sock = socket(addr_family, SOCK_DGRAM, 0)) == -1) {
@@ -359,13 +361,13 @@ int main(int argc, char *argv[]) {
                     res_nbytes += 2;
                     if (rr->use_restricted == interval) {
                         memcpy(res_ptr, &rr->target, ai_addrlen);
-                        inet_ntop(addr_family, &rr->target, remote_addr, INET6_ADDRSTRLEN);
+                        inet_ntop(addr_family, &rr->target, remote_addr, str_addrlen);
                         fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
                         rr->use_restricted = 0;
                     }
                     else {
                         memcpy(res_ptr, &rr_list->target, ai_addrlen);
-                        inet_ntop(addr_family, &rr_list->target, remote_addr, INET6_ADDRSTRLEN);
+                        inet_ntop(addr_family, &rr_list->target, remote_addr, str_addrlen);
                         fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
                         rr->use_restricted++;
                     }
