@@ -75,7 +75,7 @@ ssize_t build_labeled_record(const char domain_name[], uint8_t **ns_record) {
 
 
 int main(int argc, char *argv[]) {
-    int sock, err, addr_family;
+    int sock, err, addr_family = AF_INET;
     struct addrinfo hints = {0}, *res = NULL;
     char bind_addr[INET6_ADDRSTRLEN], remote_addr[INET6_ADDRSTRLEN], query_name[MAX_NAME_LEN];
     in_port_t bind_port, remote_port;
@@ -83,17 +83,40 @@ int main(int argc, char *argv[]) {
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
     uint8_t query_buf[BUFLEN], res_buf[BUFLEN], *query_ptr, *res_ptr, *base_name_label, *record_data_ptr;
     uint16_t message_ref;
+    uint32_t ttl = 0, interval = 1;
     struct sockaddr *addr;
     socklen_t addrlen, recv_addrlen;
     struct dns_hdr *query_hdr = (struct dns_hdr *) query_buf, *res_hdr = (struct dns_hdr *) res_buf;
     struct rr *rr_list, *rr;
 
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n", argv[0]);
+    opterr = 0;
+
+    switch(getopt(argc, argv, "i:t:6")) {
+        case 'i':
+            if (!sscanf(optarg, "%u", &interval)) {
+                fprintf(stderr, USAGE, argv[0]);
+                return 1;
+            }
+            break;
+        case 't':
+            if (!sscanf(optarg, "%u", &interval)) {
+                fprintf(stderr, USAGE, argv[0]);
+                return 1;
+            }
+            break;
+        case '6':
+            addr_family = AF_INET6;
+            break;
+        case '?':
+            fprintf(stderr, USAGE, argv[0]);
+            return 1;
+    }
+
+    if (argc - optind != 3) {
+        fprintf(stderr, USAGE, argv[0]);
         return 1;
     }
-    base_name_len = strlen(argv[1]);
-    addr_family = AF_INET; /* TODO: read this from CLI opts via getopt */
+    base_name_len = strlen(argv[optind]);
     switch (addr_family) {
         case AF_INET:
             ai_addrlen = sizeof(struct in_addr);
@@ -165,14 +188,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if ((base_name_label_len = build_labeled_record(argv[1], &base_name_label)) == -1) {
+    if ((base_name_label_len = build_labeled_record(argv[optind], &base_name_label)) == -1) {
         fprintf(stderr, "{\"message\": \"Failed to allocate buffer for labeled base domain record\", \"error\": \"%s\"}\n", strerror(errno));
         free(addr);
         close(sock);
         return 1;
     }
     
-    if (load_resource_records(argv[2], addr_family, argv[1], argv[3], &rr_list) == -1) {
+    if (load_resource_records(argv[optind + 1], addr_family, argv[optind], argv[optind + 2], ttl, &rr_list) == -1) {
         free(base_name_label);
         free(addr);
         close(sock);
@@ -334,19 +357,21 @@ int main(int argc, char *argv[]) {
                     *((uint16_t *)res_ptr) = htons(ai_addrlen);
                     res_ptr +=2 ;
                     res_nbytes += 2;
-                    if (rr->use_restricted) {
-                         memcpy(res_ptr, &rr->target, ai_addrlen);
-                         inet_ntop(addr_family, &rr->target, remote_addr, INET6_ADDRSTRLEN);
+                    if (rr->use_restricted == interval) {
+                        memcpy(res_ptr, &rr->target, ai_addrlen);
+                        inet_ntop(addr_family, &rr->target, remote_addr, INET6_ADDRSTRLEN);
+                        fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
+                        rr->use_restricted = 0;
                     }
                     else {
-                         memcpy(res_ptr, &rr_list->target, ai_addrlen);
-                         inet_ntop(addr_family, &rr_list->target, remote_addr, INET6_ADDRSTRLEN);
+                        memcpy(res_ptr, &rr_list->target, ai_addrlen);
+                        inet_ntop(addr_family, &rr_list->target, remote_addr, INET6_ADDRSTRLEN);
+                        fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
+                        rr->use_restricted++;
                     }
-                    fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
                     res_ptr += ai_addrlen;
                     res_nbytes += ai_addrlen;
 
-                    rr->use_restricted = !rr->use_restricted;
                     message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
                     record_data_ptr = (uint8_t *)&message_ref;
                     break;

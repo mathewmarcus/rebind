@@ -9,9 +9,9 @@
 
 
 static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const int ai_family);
-static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, size_t target_len, const char *format_str, struct rr *rr_list);
+static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, uint32_t ttl, size_t target_len, const char *format_str, struct rr *rr_list);
 
-int load_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, struct rr **rr_list) {
+int load_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, uint32_t ttl, struct rr **rr_list) {
     FILE *f;
     int ret;
     size_t target_len;
@@ -54,7 +54,7 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
         return -1;
     }
 
-    ret = read_resource_records(f, ai_family, name, target, target_len, format_str, *rr_list);
+    ret = read_resource_records(f, ai_family, name, target, ttl, target_len, format_str, *rr_list);
 
     free(target);
     fclose(f);
@@ -62,7 +62,7 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
     return ret;
 }
 
-static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, size_t target_len, const char *format_str, struct rr *rr_list) {
+static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, uint32_t ttl, size_t target_len, const char *format_str, struct rr *rr_list) {
     int num_matches;
     name = NULL;
 
@@ -82,12 +82,12 @@ static int read_resource_records(FILE *file, const int ai_family, char *name, ch
     }
     else {
         fprintf(stderr, "{\"message\": \"Adding resource record to list...\", \"ai_family\": \"%d\", \"name\": \"%s\", \"target\": \"%s\"}\n", ai_family, name, target);
-        if (add_rr(rr_list, name, target, 1, ai_family) == -1) {
+        if (add_rr(rr_list, name, target, ttl, ai_family) == -1) {
             return -1;
         }
         fprintf(stderr, "{\"message\": \"Added resource record to list\", \"ai_family\": \"%d\", \"name\": \"%s\", \"target\": \"%s\"}\n", ai_family, name, target);
 
-        return read_resource_records(file, ai_family, name, target, target_len, format_str, rr_list);
+        return read_resource_records(file, ai_family, name, target, ttl, target_len, format_str, rr_list);
     }
 }
 
