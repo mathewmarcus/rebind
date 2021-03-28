@@ -17,7 +17,10 @@ add_library(_rebind_rr OBJECT src/_rebind_rr.h src/_rebind_rr.c)
 add_library(_rebind_privs OBJECT src/_rebind_privs.h src/_rebind_privs.c)
 
 add_executable(rebind src/main.c)
-target_link_options(rebind PRIVATE "-s")
+
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release")
+    target_link_options(rebind PRIVATE "-s")
+endif()
 
 if (CAP_FOUND)
     target_link_libraries(rebind ${LIBCAP} m _rebind_rr _rebind_privs)
