@@ -24,6 +24,9 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
     if (add_rr(*rr_list, "ns1", host_ip, 60, ai_family) == -1) /* Add ns1 (nameserver) to list */
         return 1;
 
+    if (add_rr(*rr_list, "ns2", host_ip, 60, ai_family) == -1) /* Add ns2 (nameserver) to list */
+        return 1;
+
     switch (ai_family) {
         case AF_INET:
             target_len = INET_ADDRSTRLEN;

@@ -140,6 +140,7 @@ int main(int argc, char *argv[]) {
     if (raise_privs()) {
         freeaddrinfo(res);
         close(sock);
+        return 1;
     }
     #endif
 
