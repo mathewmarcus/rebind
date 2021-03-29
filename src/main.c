@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
                 sock,
                 remote_addr,
                 remote_port);
-        if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, rr_list))) { /* TODO support subdomains */
+        if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, rr_list))) {
             fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\"}\n", query_name + 1, rr_list->name);
             res_hdr->rcode = rcode_name_error;
             goto authoritative_rr;
