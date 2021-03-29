@@ -91,27 +91,30 @@ int main(int argc, char *argv[]) {
 
     opterr = 0;
 
-    switch(getopt(argc, argv, "i:t:6")) {
-        case 'i':
-            if (!sscanf(optarg, "%u", &interval)) {
+    while((err = getopt(argc, argv, "r:t:6")) != -1) {
+        switch(err) {
+            case 'r':
+                if (!sscanf(optarg, "%u", &interval)) {
+                    fprintf(stderr, USAGE, argv[0]);
+                    return 1;
+                }
+                break;
+            case 't':
+                if (!sscanf(optarg, "%u", &ttl)) {
+                    fprintf(stderr, USAGE, argv[0]);
+                    return 1;
+                }
+                break;
+            case '6':
+                addr_family = AF_INET6;
+                ai_addrlen = sizeof(struct in6_addr);
+                str_addrlen = INET6_ADDRSTRLEN;
+                break;
+            case '?':
+            default:
                 fprintf(stderr, USAGE, argv[0]);
                 return 1;
-            }
-            break;
-        case 't':
-            if (!sscanf(optarg, "%u", &interval)) {
-                fprintf(stderr, USAGE, argv[0]);
-                return 1;
-            }
-            break;
-        case '6':
-            addr_family = AF_INET6;
-            ai_addrlen = sizeof(struct in6_addr);
-            str_addrlen = INET6_ADDRSTRLEN;
-            break;
-        case '?':
-            fprintf(stderr, USAGE, argv[0]);
-            return 1;
+        }
     }
 
     if (argc - optind != 3) {
