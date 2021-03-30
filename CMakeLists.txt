@@ -22,8 +22,10 @@ if (${CMAKE_BUILD_TYPE} STREQUAL "Release")
     target_link_options(rebind PRIVATE "-s")
 endif()
 
+target_link_libraries(rebind m _rebind_rr _rebind_privs)
+
 if (CAP_FOUND)
-    target_link_libraries(rebind ${LIBCAP} m _rebind_rr _rebind_privs)
+    target_link_libraries(rebind ${LIBCAP})
     install(TARGETS rebind RUNTIME)
     install(CODE "execute_process(COMMAND setcap \"cap_net_bind_service=p\" ${CMAKE_INSTALL_PREFIX}/bin/rebind)")
 else()

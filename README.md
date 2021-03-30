@@ -1,6 +1,6 @@
 # rebind
 
-This is a tool for the discovery and testing of SSRF DNS rebinding vulnerabilities. 
+DNS server for the discovery and testing of SSRF DNS rebinding vulnerabilities. 
 
 ## Build
 ```bash
