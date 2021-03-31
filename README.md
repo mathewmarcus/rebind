@@ -25,5 +25,5 @@ $ sudo make install
 1. Create a CSV file of the form `subdomain,reservedIP`. An example of such a file is `example.csv`
 2. Run the DNS server
 ```bash
-$ rebind [-r ${RESPONSE_RATIO}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
+$ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
 ```

@@ -10,7 +10,7 @@
 #define MAX_NAME_LEN 255
 #define TTL 1
 #define NS_TTL 86400 /* 1 day */
-#define USAGE "Usage: %s [-r ${RESPONSE_RATIO}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n"
+#define USAGE "Usage: %s [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n"
 
 enum query_type {
     A = 0x0001,

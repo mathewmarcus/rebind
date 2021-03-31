@@ -104,7 +104,7 @@ struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const int 
         return NULL;
     }
     n->name = name;
-    n->use_restricted = 0;
+    n->sent_num_valid = 0;
     n->next = NULL;
     n->subdomain_len = strlen(name) + 1;
     n->ttl = ttl;
@@ -121,7 +121,7 @@ static int add_rr(struct rr *root, char *name, const char *target, const uint32_
             fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"ai_family\": \"%d\", \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", ai_family, strerror(errno), name, target);
             return -1;
         }
-        root->use_restricted = 0;
+        root->sent_num_valid = 0;
         return 0;
     }
     else if (!root->next) { /* We've reached the end of the list, add the new resource record */

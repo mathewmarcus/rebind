@@ -12,7 +12,7 @@ struct rr {
         struct in6_addr ipv6;
         char *name;
     } target;
-    int use_restricted;
+    int sent_num_valid;
     struct rr *next;
     size_t subdomain_len;
     uint32_t ttl;

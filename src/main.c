@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
     uint8_t query_buf[BUFLEN], res_buf[BUFLEN], *query_ptr, *res_ptr, *base_name_label, *record_data_ptr;
     uint16_t message_ref;
-    uint32_t ttl = 0, interval = 1;
+    uint32_t ttl = 0, valid_response_count = 1;
     struct sockaddr *addr;
     socklen_t addrlen, recv_addrlen;
     struct dns_hdr *query_hdr = (struct dns_hdr *) query_buf, *res_hdr = (struct dns_hdr *) res_buf;
@@ -91,10 +91,10 @@ int main(int argc, char *argv[]) {
 
     opterr = 0;
 
-    while((err = getopt(argc, argv, "r:t:6")) != -1) {
+    while((err = getopt(argc, argv, "c:t:6")) != -1) {
         switch(err) {
-            case 'r':
-                if (!sscanf(optarg, "%u", &interval)) {
+            case 'c':
+                if (!sscanf(optarg, "%u", &valid_response_count)) {
                     fprintf(stderr, USAGE, argv[0]);
                     return 1;
                 }
@@ -362,18 +362,19 @@ int main(int argc, char *argv[]) {
                     *((uint16_t *)res_ptr) = htons(ai_addrlen);
                     res_ptr +=2 ;
                     res_nbytes += 2;
-                    if (rr->use_restricted == interval) {
+
+                    fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
+                    if (rr->sent_num_valid == valid_response_count) {
                         memcpy(res_ptr, &rr->target, ai_addrlen);
                         inet_ntop(addr_family, &rr->target, remote_addr, str_addrlen);
-                        fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
-                        rr->use_restricted = 0;
+                        rr->sent_num_valid = 0;
                     }
                     else {
                         memcpy(res_ptr, &rr_list->target, ai_addrlen);
                         inet_ntop(addr_family, &rr_list->target, remote_addr, str_addrlen);
-                        fprintf(stderr, " \"answer\": \"%s\", \"is_reserved\": %d,", remote_addr, rr->use_restricted);
-                        rr->use_restricted++;
+                        rr->sent_num_valid++;
                     }
+                    fprintf(stderr, " \"answer\": \"%s\",", remote_addr);
                     res_ptr += ai_addrlen;
                     res_nbytes += ai_addrlen;
 
