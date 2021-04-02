@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "_rebind_privs.h"
 #include "_rebind_rr.h"
+#include "_rebind_query.h"
 
 /* https://tools.ietf.org/html/rfc1035#section-2.3.4 */
 #define BUFLEN 512 
