@@ -93,7 +93,6 @@ int main(int argc, char *argv[]) {
     struct sigaction handler = { 0 };
 
     handler.sa_handler = set_reload_flag;
-    //handler.sa_flags = SA_RESTART;
     if (sigaction(SIGHUP, &handler, NULL) == -1) {
         fprintf(stderr, "{\"message\": \"Failed to set signal handler for SIGHUP\", \"error\": \"%s\"}\n", strerror(errno));
         return 1;
