@@ -7,9 +7,20 @@
 
 #include "_rebind_rr.h"
 
+int should_reload = 0;
 
 static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const int ai_family);
 static int read_resource_records(FILE *file, const int ai_family, char *name, char *target, uint32_t ttl, size_t target_len, const char *format_str, struct rr *rr_list);
+
+void set_reload_flag(int signal) {
+    should_reload = 1;
+}
+
+int reload_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, uint32_t ttl, struct rr **rr_list) {
+    free_rr_list(*rr_list);
+
+    return load_resource_records(filename, ai_family, domain, host_ip, ttl, rr_list);
+}
 
 int load_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, uint32_t ttl, struct rr **rr_list) {
     FILE *f;
@@ -17,14 +28,14 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
     size_t target_len;
     char *name, *target, format_str[13];
 
-    if (!(*rr_list = new_rr(domain, host_ip, 60, ai_family))) /* Put base domain in front of list */
+    if (!(*rr_list = new_rr(strdup(domain), host_ip, 60, ai_family))) /* Put base domain in front of list */
         return 1;
     (*rr_list)->subdomain_len = 0;
 
-    if (add_rr(*rr_list, "ns1", host_ip, 60, ai_family) == -1) /* Add ns1 (nameserver) to list */
+    if (add_rr(*rr_list, strdup("ns1"), host_ip, 60, ai_family) == -1) /* Add ns1 (nameserver) to list */
         return 1;
 
-    if (add_rr(*rr_list, "ns2", host_ip, 60, ai_family) == -1) /* Add ns2 (nameserver) to list */
+    if (add_rr(*rr_list, strdup("ns2"), host_ip, 60, ai_family) == -1) /* Add ns2 (nameserver) to list */
         return 1;
 
     switch (ai_family) {
@@ -116,15 +127,7 @@ struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const int 
 static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const int ai_family) {
     struct rr *n;
 
-    if (root->name == name) /* This resource record already exists, update target addr */ {
-        if (inet_pton(ai_family, target, &root->target) != 1) {
-            fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"ai_family\": \"%d\", \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", ai_family, strerror(errno), name, target);
-            return -1;
-        }
-        root->sent_num_valid = 0;
-        return 0;
-    }
-    else if (!root->next) { /* We've reached the end of the list, add the new resource record */
+    if (!root->next) { /* We've reached the end of the list, add the new resource record */
         if (!(n = new_rr(name, target, ttl, ai_family)))
             return -1;
         root->next = n;
@@ -148,7 +151,9 @@ struct rr *find_subdomain_rr(const char *name, const size_t len, struct rr *root
     if (root) {
         free_rr_list(root->next);
         free(root->name);
+        root->name = NULL;
         free(root);
+        root = NULL;
     }
     return;
 }

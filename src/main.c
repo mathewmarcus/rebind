@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 #include "rebind.h"
 
@@ -88,9 +89,17 @@ int main(int argc, char *argv[]) {
     socklen_t addrlen, recv_addrlen;
     struct dns_hdr *query_hdr = (struct dns_hdr *) query_buf, *res_hdr = (struct dns_hdr *) res_buf;
     struct rr *rr_list, *rr;
+    sigset_t new_sigs, curr_sigs;
+    struct sigaction handler = { 0 };
+
+    handler.sa_handler = set_reload_flag;
+    //handler.sa_flags = SA_RESTART;
+    if (sigaction(SIGHUP, &handler, NULL) == -1) {
+        fprintf(stderr, "{\"message\": \"Failed to set signal handler for SIGHUP\", \"error\": \"%s\"}\n", strerror(errno));
+        return 1;
+    }
 
     opterr = 0;
-
     while((err = getopt(argc, argv, "c:t:6")) != -1) {
         switch(err) {
             case 'c':
@@ -207,6 +216,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    if (sigemptyset(&new_sigs) == -1 || sigaddset(&new_sigs, SIGHUP)) {
+        fprintf(stderr, "{\"message\": \"Failed to initialize signal set\", \"error\": \"%s\"}\n", strerror(errno));
+        free(base_name_label);
+        free(addr);
+        close(sock);
+    }
+
     res_hdr->qr = msg_response;
     res_hdr->aa = 1;
     res_hdr->tc = 0;
@@ -223,7 +239,7 @@ int main(int argc, char *argv[]) {
         record_len = base_name_label_len;
     
         fprintf(stderr, "{\"message\": \"Waiting for DNS query...\", \"ip\": \"%s\", \"port\": %hu, \"fd\": %d}\n", bind_addr, bind_port, sock);
-        if ((nbytes = recvfrom(sock, query_ptr, BUFLEN, 0, addr, &recv_addrlen)) == -1) {
+        if ((nbytes = recvfrom(sock, query_ptr, BUFLEN, 0, addr, &recv_addrlen)) == -1 && errno != EINTR) {
             fprintf(stderr, "{\"message\": \"Error while waiting for DNS query\", \"ip\": \"%s\", \"port\": %hu, \"fd\": %d, \"error\": \"%s\"}\n",
                 bind_addr,
                 bind_port,
@@ -233,12 +249,19 @@ int main(int argc, char *argv[]) {
             close(sock);
             return 1;
         }
-        if (!nbytes) {
+        else if (!nbytes) {
             fprintf(stderr, "{\"message\": \"Received EOF on server socket while waiting for DNS query\"}, \"ip\": \"%s\", \"port\": %hu, \"fd\": %d}\n",
                 bind_addr,
                 bind_port,
                 sock);
             break;
+        }
+
+        if (should_reload) {
+            should_reload = 0;
+            if (reload_resource_records(argv[optind + 1], addr_family, argv[optind], argv[optind + 2], ttl, &rr_list) == -1)
+                break;
+            continue;
         }
 
         switch (addr_family) {
@@ -306,6 +329,11 @@ int main(int argc, char *argv[]) {
         res_hdr->id = query_hdr->id;
         res_hdr->opcode = query_hdr->opcode;
         res_hdr->rd = query_hdr->rd;
+
+        if (sigprocmask(SIG_BLOCK, &new_sigs, &curr_sigs) == -1) {
+            fprintf(stderr, "{\"message\", \"Failed to add SIGHUP to blocked signal mask\", \"error\": \"%s\"}", strerror(errno));
+            break;
+        }
 
         nbytes = parse_query_name(query_name, query_ptr, fmin(nbytes, MAX_NAME_LEN), &err);
         if (err) {
@@ -469,7 +497,31 @@ int main(int argc, char *argv[]) {
         else
             res_nbytes += 6;
 
-        sendto(sock, res_buf, res_nbytes, 0, addr, recv_addrlen);
+        if ((nbytes = sendto(sock, res_buf, res_nbytes, 0, addr, recv_addrlen)) == -1) {
+            fprintf(stderr, "{\"message\": \"Failed to send DNS response\", \"server_ip\": \"%s\", \"server_port\": %hu, \"fd\": %d, \"client_ip\": \"%s\", \"client_port\": %hu, \"message_len\" %lu, \"error\": \"%s\"}\n",
+                bind_addr,
+                bind_port,
+                sock,
+                remote_addr,
+                remote_port,
+                res_nbytes,
+                strerror(errno));
+            break;
+        }
+        if (nbytes != res_nbytes)
+            fprintf(stderr, "{\"message\": \"Failed to send all DNS response bytes\", \"server_ip\": \"%s\", \"server_port\": %hu, \"fd\": %d, \"client_ip\": \"%s\", \"client_port\": %hu, \"message_len\" %lu, \"sent_nbytes\": %lu}\n",
+                bind_addr,
+                bind_port,
+                sock,
+                remote_addr,
+                remote_port,
+                res_nbytes,
+                nbytes);
+
+        if (sigprocmask(SIG_BLOCK, &curr_sigs, &new_sigs) == -1) {
+            fprintf(stderr, "{\"message\", \"Failed to remove SIGHUP from blocked signal mask\", \"error\": \"%s\"}", strerror(errno));
+            break;
+        }
     }
 
     free_rr_list(rr_list);

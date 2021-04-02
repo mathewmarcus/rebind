@@ -27,3 +27,9 @@ $ sudo make install
 ```bash
 $ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
 ```
+
+### Reloading
+Changes to the CSV file can be reloaded without restarting the server
+```bash
+$ kill -s SIGHUP ${PID}
+```
