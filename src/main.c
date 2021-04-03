@@ -30,6 +30,7 @@ int main(int argc, char *argv[]) {
     struct rr *rr_list, *rr;
     sigset_t new_sigs, curr_sigs;
     struct sigaction handler = { 0 };
+    enum query_type host_qtype;
 
     handler.sa_handler = set_reload_flag;
     if (sigaction(SIGHUP, &handler, NULL) == -1) {
@@ -97,10 +98,12 @@ int main(int argc, char *argv[]) {
     if (res->ai_family == AF_INET) {
         inet_ntop(res->ai_family, &((struct sockaddr_in * ) res->ai_addr)->sin_addr, bind_addr, res->ai_addrlen);
         bind_port = ntohs(((struct sockaddr_in * ) res->ai_addr)->sin_port);
+        host_qtype = A;
     }
     else if (res->ai_family == AF_INET6) {
         inet_ntop(res->ai_family, &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr, bind_addr, res->ai_addrlen);
         bind_port = ntohs(((struct sockaddr_in6 * ) res->ai_addr)->sin6_port);
+        host_qtype = AAAA;
     }
     else {
         fprintf(stderr, "{\"message\": \"Unsupported address type family returned from getaddrinfo()\", \"ai_family\": \"%d\"}\n", res->ai_family);
@@ -297,18 +300,21 @@ int main(int argc, char *argv[]) {
                 sock,
                 remote_addr,
                 remote_port);
-        if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, rr_list))) {
-            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\"}\n", query_name + 1, rr_list->name);
+
+        
+        query_ptr += (1 + nbytes + 1); /* skip past the trailing null byte*/
+        if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, ntohs(*((uint16_t *)query_ptr)), rr_list))) {
+            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": 0x%02X}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
             res_hdr->rcode = rcode_name_error;
             goto authoritative_rr;
         } else {
             fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
-            query_ptr += (1 + nbytes + 1); /* skip past the trailing null byte*/
 
             // Compression label
 
-            switch (htons(*((uint16_t *)query_ptr))) {
+            switch (rr->qtype) {
                 case A:
+                case AAAA:
                     res_hdr->ancount = htons(0x0001);
                     message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
                     record_data_ptr = (uint8_t *)&message_ref;
@@ -316,7 +322,7 @@ int main(int argc, char *argv[]) {
                     memcpy(res_ptr, record_data_ptr, record_len);
                     res_ptr += record_len;
                     res_nbytes += record_len;
-                    *((uint16_t *)res_ptr) = htons(A);
+                    *((uint16_t *)res_ptr) = htons(rr->qtype);
                     res_ptr +=2;
                     res_nbytes += 2;
                     *((uint16_t *)res_ptr) = htons(0x0001);
@@ -325,24 +331,24 @@ int main(int argc, char *argv[]) {
                     *((uint32_t *)res_ptr) = htonl(rr->ttl);
                     res_ptr += 4;
                     res_nbytes += 4;
-                    *((uint16_t *)res_ptr) = htons(ai_addrlen);
+                    *((uint16_t *)res_ptr) = htons(rr->_target_addrlen);
                     res_ptr +=2 ;
                     res_nbytes += 2;
 
                     fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
                     if (rr->sent_num_valid == valid_response_count) {
-                        memcpy(res_ptr, &rr->target, ai_addrlen);
-                        inet_ntop(addr_family, &rr->target, remote_addr, str_addrlen);
+                        memcpy(res_ptr, &rr->target, rr->_target_addrlen);
+                        inet_ntop(rr->_target_family, &rr->target, remote_addr, rr->_target_straddrlen);
                         rr->sent_num_valid = 0;
                     }
                     else {
-                        memcpy(res_ptr, &rr_list->target, ai_addrlen);
-                        inet_ntop(addr_family, &rr_list->target, remote_addr, str_addrlen);
+                        memcpy(res_ptr, &rr_list->target, rr->_target_addrlen);
+                        inet_ntop(rr->_target_family, &rr_list->target, remote_addr, rr->_target_straddrlen);
                         rr->sent_num_valid++;
                     }
                     fprintf(stderr, " \"answer\": \"%s\",", remote_addr);
-                    res_ptr += ai_addrlen;
-                    res_nbytes += ai_addrlen;
+                    res_ptr += rr->_target_addrlen;
+                    res_nbytes += rr->_target_addrlen;
 
                     message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
                     record_data_ptr = (uint8_t *)&message_ref;
@@ -357,17 +363,17 @@ int main(int argc, char *argv[]) {
                 */
                 default:
                     res_hdr->rcode = rcode_name_error;
-                    fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qtype\": \"%hu\"}\n", htons(*((uint16_t *)query_ptr)));
+                    fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qtype\": \"%hu\"}\n", ntohs(*((uint16_t *)query_ptr)));
                     goto authoritative_rr;
             }
         }
         fprintf(stderr, " \"qtype\": \"%hu\",", htons(*((uint16_t *)query_ptr)));
         query_ptr += 2;
 
-        if (htons(*((uint16_t *)query_ptr)) != 0x0001) {
-            fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qclass\": \"%hu\"}\n", htons(*((uint16_t *)query_ptr)));
+        if (ntohs(*((uint16_t *)query_ptr)) != 0x0001) {
+            fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qclass\": \"%hu\"}\n", ntohs(*((uint16_t *)query_ptr)));
         }
-        fprintf(stderr, " \"qclass\": \"%hu\",", htons(*((uint16_t *)query_ptr)));
+        fprintf(stderr, " \"qclass\": \"%hu\",", ntohs(*((uint16_t *)query_ptr)));
         query_ptr += 2;
 
         fprintf(stderr, " \"message\": \"Received valid DNS query\"}\n");
@@ -407,7 +413,7 @@ int main(int argc, char *argv[]) {
         /*
             Build Additional section
         */
-        if ((rr = find_subdomain_rr("ns1", 4, rr_list))) {
+        if ((rr = find_subdomain_rr("ns1", 4, host_qtype, rr_list))) {
             res_hdr->arcount = htons(0x0001);
             message_ref = htons(((3 << 6) << 8) | (res_ptr - res_buf));
             record_data_ptr = (uint8_t *)&message_ref;
@@ -416,7 +422,7 @@ int main(int argc, char *argv[]) {
             memcpy(res_ptr, record_data_ptr, record_len);
             res_ptr += 2;
             res_nbytes += 2;
-            *((uint16_t *)res_ptr) = htons(A);
+            *((uint16_t *)res_ptr) = htons(rr->qtype);
             res_ptr +=2;
             res_nbytes += 2;
             *((uint16_t *)res_ptr) = htons(0x0001);
@@ -425,12 +431,12 @@ int main(int argc, char *argv[]) {
             *((uint32_t *)res_ptr) = htonl(rr->ttl);
             res_ptr += 4;
             res_nbytes += 4;
-            *((uint16_t *)res_ptr) = htons(ai_addrlen);
+            *((uint16_t *)res_ptr) = htons(rr->_target_addrlen);
             res_ptr += 2;
             res_nbytes += 2;
-            memcpy(res_ptr, &rr->target, ai_addrlen);
-            res_ptr += ai_addrlen;
-            res_nbytes += ai_addrlen;
+            memcpy(res_ptr, &rr->target, rr->_target_addrlen);
+            res_ptr += rr->_target_addrlen;
+            res_nbytes += rr->_target_addrlen;
         }
         else
             res_nbytes += 6;
