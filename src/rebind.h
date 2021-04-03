@@ -13,13 +13,6 @@
 #define NS_TTL 86400 /* 1 day */
 #define USAGE "Usage: %s [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n"
 
-enum query_type {
-    A = 0x0001,
-    NS = 0x0002,
-    CNAME = 0x0005,
-    AAAA = 0x001C
-};
-
 enum msg_type {
     msg_query = 0x00,
     msg_response = 0x01
