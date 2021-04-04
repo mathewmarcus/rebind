@@ -32,14 +32,14 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
     qtype = ai_family == AF_INET6 ? AAAA : A;
 
     if (!(*rr_list = new_rr(strdup(domain), host_ip, 60, qtype))) /* Put base domain in front of list */
-        return 1;
+        return -1;
     (*rr_list)->subdomain_len = 0;
 
     if (add_rr(*rr_list, strdup("ns1"), host_ip, 60, qtype) == -1) /* Add ns1 (nameserver) to list */
-        return 1;
+        return -1;
 
     if (add_rr(*rr_list, strdup("ns2"), host_ip, 60, qtype) == -1) /* Add ns2 (nameserver) to list */
-        return 1;
+        return -1;
 
 
     if (!(f = fopen(filename, "r"))) {
