@@ -46,6 +46,9 @@ $ sudo make install
 ### Options
 * `-t`: DNS TTL (default `0`)
 * `-c`: number of legitimate responses for each reserved response (default `1`)
+* `-6` (${HOST_IP} is an IPv6 address)
+* `-a`: public A record target (default 0.0.0.0)
+* `-A`: public AAAA record target (default ::)
 
 ### Running
 1. Create a CSV file of the form `subdomain,reservedIP`. An example of such a file is `example.csv`

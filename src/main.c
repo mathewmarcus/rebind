@@ -17,7 +17,7 @@
 int main(int argc, char *argv[]) {
     int sock, err, addr_family = AF_INET;
     struct addrinfo hints = {0}, *res = NULL;
-    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr;
+    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target;
     in_port_t bind_port, remote_port;
     size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN;
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
@@ -31,6 +31,10 @@ int main(int argc, char *argv[]) {
     sigset_t new_sigs, curr_sigs;
     struct sigaction handler = { 0 };
     enum query_type host_qtype;
+    struct in_addr public_a;
+    struct in6_addr public_aaaa = IN6ADDR_ANY_INIT;
+
+    public_a.s_addr = INADDR_ANY;
 
     handler.sa_handler = set_reload_flag;
     if (sigaction(SIGHUP, &handler, NULL) == -1) {
@@ -39,7 +43,7 @@ int main(int argc, char *argv[]) {
     }
 
     opterr = 0;
-    while((err = getopt(argc, argv, "c:t:6")) != -1) {
+    while((err = getopt(argc, argv, "c:t:6a:A:")) != -1) {
         switch(err) {
             case 'c':
                 if (!sscanf(optarg, "%u", &valid_response_count)) {
@@ -57,6 +61,18 @@ int main(int argc, char *argv[]) {
                 addr_family = AF_INET6;
                 ai_addrlen = sizeof(struct in6_addr);
                 str_addrlen = INET6_ADDRSTRLEN;
+                break;
+            case 'a':
+                if (inet_pton(AF_INET, optarg, &public_a) != 1) {
+                    fprintf(stderr, "{\"message\": \"Failed to parse public A record target\", \"arg\": \"%s\"}\n", optarg);
+                    return 1;
+                }
+                break;
+            case 'A':
+                if (inet_pton(AF_INET6, optarg, &public_aaaa) != 1) {
+                    fprintf(stderr, "{\"message\": \"Failed to parse public AAAA record target\", \"arg\": \"%s\"}\n", optarg);
+                    return 1;
+                }
                 break;
             case '?':
             default:
@@ -310,6 +326,8 @@ int main(int argc, char *argv[]) {
         } else {
             fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
 
+            public_target = rr->qtype == AAAA ? (char *) &public_aaaa : (char *) &public_a;
+
             // Compression label
 
             switch (rr->qtype) {
@@ -342,8 +360,8 @@ int main(int argc, char *argv[]) {
                         rr->sent_num_valid = 0;
                     }
                     else {
-                        memcpy(res_ptr, &rr_list->target, rr->_target_addrlen);
-                        inet_ntop(rr->_target_family, &rr_list->target, remote_addr, rr->_target_straddrlen);
+                        memcpy(res_ptr, public_target, rr->_target_addrlen);
+                        inet_ntop(rr->_target_family, public_target, remote_addr, rr->_target_straddrlen);
                         rr->sent_num_valid++;
                     }
                     fprintf(stderr, " \"answer\": \"%s\",", remote_addr);
