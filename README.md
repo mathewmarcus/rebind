@@ -46,12 +46,12 @@ $ sudo make install
 ### Options
 * `-t`: DNS TTL (default `0`)
 * `-c`: number of legitimate responses for each reserved response (default `1`)
-* `-6` (${HOST_IP} is an IPv6 address)
-* `-a`: public A record target (default 0.0.0.0)
-* `-A`: public AAAA record target (default ::)
+* `-6` (`${HOST_IP}` is an IPv6 address)
+* `-a`: public A record target (default `0.0.0.0`)
+* `-A`: public AAAA record target (default `::`)
 
 ### Running
-1. Create a CSV file of the form `subdomain,reservedIP`. An example of such a file is `example.csv`
+1. Create a CSV file of the form `qtype,subdomain,reservedIP`. An example of such a file is `example.csv`
 2. Run the DNS server
 ```bash
 $ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
@@ -68,16 +68,18 @@ $ kill -s SIGHUP ${PID}
 Server:
 ```bash
 $ cat ./example.csv 
-one,127.0.0.1
-two,192.168.0.1
-three,169.254.169.254
+A,one,127.0.0.1
+A,two,192.168.0.1
+A,three,169.254.169.254
+AAAA,four,::1
+A,five,127.0.0.2
 $ rebind example.com ./example.csv 34.232.67.223
 ```
 
 Client:
 ```bash
 $ dig +noall +answer one.example.com @127.0.0.1
-one.example.com.	0	IN	A	34.232.67.223
+one.example.com.	0	IN	A	0.0.0.0
 $ dig +noall +answer one.example.com @127.0.0.1
 one.example.com.	0	IN	A	127.0.0.1
 ```
