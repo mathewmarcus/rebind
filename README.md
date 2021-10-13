@@ -49,12 +49,13 @@ $ sudo make install
 * `-6` (`${HOST_IP}` is an IPv6 address)
 * `-a`: public A record target (default `0.0.0.0`)
 * `-A`: public AAAA record target (default `::`)
+* `-p`: alternative UDP port on which to listen for DNS requests (default `53`)
 
 ### Running
 1. Create a CSV file of the form `qtype,subdomain,reservedIP`. An example of such a file is `example.csv`
 2. Run the DNS server
 ```bash
-$ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
+$ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] [-a ${PUBLIC_A}] [-A ${PUBLIC_AAAA}] [-6] [-p ${PORT}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
 ```
 
 ### Reloading
