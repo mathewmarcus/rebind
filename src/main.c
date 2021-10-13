@@ -320,7 +320,7 @@ int main(int argc, char *argv[]) {
         
         query_ptr += (1 + nbytes + 1); /* skip past the trailing null byte*/
         if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, ntohs(*((uint16_t *)query_ptr)), rr_list))) {
-            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": 0x%02X}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
+            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": %d}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
             res_hdr->rcode = rcode_name_error;
             goto authoritative_rr;
         } else {
@@ -480,7 +480,7 @@ int main(int argc, char *argv[]) {
                 res_nbytes,
                 nbytes);
 
-        if (sigprocmask(SIG_BLOCK, &curr_sigs, &new_sigs) == -1) {
+        if (sigprocmask(SIG_UNBLOCK, &curr_sigs, &new_sigs) == -1) {
             fprintf(stderr, "{\"message\", \"Failed to remove SIGHUP from blocked signal mask\", \"error\": \"%s\"}", strerror(errno));
             break;
         }
