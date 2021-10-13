@@ -19,7 +19,7 @@ add_library(_rebind_query OBJECT src/_rebind_query.h src/_rebind_query.c)
 
 add_executable(rebind src/main.c)
 
-if (${CMAKE_BUILD_TYPE} STREQUAL "Release")
+if (${CMAKE_BUILD_TYPE} AND ${CMAKE_BUILD_TYPE} STREQUAL "Release")
     target_link_options(rebind PRIVATE "-s")
 endif()
 

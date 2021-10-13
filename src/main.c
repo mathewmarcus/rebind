@@ -17,7 +17,7 @@
 int main(int argc, char *argv[]) {
     int sock, err, addr_family = AF_INET;
     struct addrinfo hints = {0}, *res = NULL;
-    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target;
+    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *port = "domain";
     in_port_t bind_port, remote_port;
     size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN;
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     }
 
     opterr = 0;
-    while((err = getopt(argc, argv, "c:t:6a:A:")) != -1) {
+    while((err = getopt(argc, argv, "c:t:6a:A:p:")) != -1) {
         switch(err) {
             case 'c':
                 if (!sscanf(optarg, "%u", &valid_response_count)) {
@@ -73,6 +73,9 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "{\"message\": \"Failed to parse public AAAA record target\", \"arg\": \"%s\"}\n", optarg);
                     return 1;
                 }
+                break;
+            case 'p':
+                port = optarg;
                 break;
             case '?':
             default:
@@ -106,7 +109,7 @@ int main(int argc, char *argv[]) {
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
     fprintf(stderr, "{\"message\": \"Retrieving bind address...\"}\n");
-    if ((err = getaddrinfo(NULL, "domain", &hints, &res))) {
+    if ((err = getaddrinfo(NULL, port, &hints, &res))) {
         fprintf(stderr, "{\"message\": \"Failed to retrieve bind address\", \"error\": \"%d\"}\n", err);
         close(sock);
         return 1;
@@ -320,7 +323,7 @@ int main(int argc, char *argv[]) {
         
         query_ptr += (1 + nbytes + 1); /* skip past the trailing null byte*/
         if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, ntohs(*((uint16_t *)query_ptr)), rr_list))) {
-            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": 0x%02X}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
+            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": %d}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
             res_hdr->rcode = rcode_name_error;
             goto authoritative_rr;
         } else {
@@ -480,7 +483,7 @@ int main(int argc, char *argv[]) {
                 res_nbytes,
                 nbytes);
 
-        if (sigprocmask(SIG_BLOCK, &curr_sigs, &new_sigs) == -1) {
+        if (sigprocmask(SIG_SETMASK, &curr_sigs, NULL) == -1) {
             fprintf(stderr, "{\"message\", \"Failed to remove SIGHUP from blocked signal mask\", \"error\": \"%s\"}", strerror(errno));
             break;
         }

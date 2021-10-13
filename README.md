@@ -24,9 +24,9 @@ if ip.is_global:
 1. DNS lookup to validate the URL
 2. DNS lookup as part of the HTTP request
 
-As a result, this type of SSRF prevention can potentially be exploited by a DNS server - such as this - which does the following:
-1.  Returns a public A/AAAA record with a low TTL (this is used in the URL validation)
-2.  Returns a private/reserved/loopback/link_local A/AAAA record (this is used in the actual HTTP request)
+The above logic creates a time-of-check to time-of-use (TOCTTOU) race condition which can potentially be exploited by a DNS server - such as this - which does the following:
+1.  Returns a public A/AAAA/CNAME record with a low TTL (this is used in the URL validation)
+2.  Returns a private/reserved/loopback/link_local A/AAAA/CNAME record (this is used in the actual HTTP request)
 
 ## Build
 ```bash
@@ -49,12 +49,13 @@ $ sudo make install
 * `-6` (`${HOST_IP}` is an IPv6 address)
 * `-a`: public A record target (default `0.0.0.0`)
 * `-A`: public AAAA record target (default `::`)
+* `-p`: alternative UDP port on which to listen for DNS requests (default `53`)
 
 ### Running
 1. Create a CSV file of the form `qtype,subdomain,reservedIP`. An example of such a file is `example.csv`
 2. Run the DNS server
 ```bash
-$ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
+$ rebind [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] [-a ${PUBLIC_A}] [-A ${PUBLIC_AAAA}] [-6] [-p ${PORT}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}
 ```
 
 ### Reloading
