@@ -54,9 +54,8 @@ int raise_privs() {
 
 
 int drop_privs() {
-    cap_t caps;
-
     #ifdef CAP_FOUND
+    cap_t caps;
     if (!(caps = cap_init())) {
         fprintf(stderr, "{\"message\": \"Failed to allocate space for process capabilities\", \"error\": \"%s\"}\n", strerror(errno));
         return -1;
