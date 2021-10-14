@@ -17,7 +17,7 @@
 int main(int argc, char *argv[]) {
     int sock, err, addr_family = AF_INET;
     struct addrinfo hints = {0}, *res = NULL;
-    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *port = "domain";
+    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *port = "domain", *target_str, *public_target_str, public_target_a_str[INET_ADDRSTRLEN], public_target_aaaa_str[INET6_ADDRSTRLEN];
     in_port_t bind_port, remote_port;
     size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN;
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
@@ -88,6 +88,9 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, USAGE, argv[0]);
         return 1;
     }
+
+    inet_ntop(AF_INET, &public_a, public_target_a_str, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET6, &public_aaaa, public_target_aaaa_str, INET6_ADDRSTRLEN);
 
     if (!(bind_addr = malloc(str_addrlen)))
         return 1;
@@ -330,6 +333,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
 
             public_target = rr->qtype == AAAA ? (char *) &public_aaaa : (char *) &public_a;
+            public_target_str = rr->qtype == AAAA ? public_target_aaaa_str : public_target_a_str;
 
             // Compression label
 
@@ -359,15 +363,17 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
                     if (rr->sent_num_valid == valid_response_count) {
                         memcpy(res_ptr, &rr->target, rr->_target_addrlen);
-                        inet_ntop(rr->_target_family, &rr->target, remote_addr, rr->_target_straddrlen);
+                        target_str = rr->target_str;
+                        //inet_ntop(rr->_target_family, &rr->target, target_str, rr->_target_straddrlen);
                         rr->sent_num_valid = 0;
                     }
                     else {
                         memcpy(res_ptr, public_target, rr->_target_addrlen);
-                        inet_ntop(rr->_target_family, public_target, remote_addr, rr->_target_straddrlen);
+                        //inet_ntop(rr->_target_family, public_target, target_str, rr->_target_straddrlen);
+                        target_str = public_target_str;
                         rr->sent_num_valid++;
                     }
-                    fprintf(stderr, " \"answer\": \"%s\",", remote_addr);
+                    fprintf(stderr, " \"answer\": \"%s\",", target_str);
                     res_ptr += rr->_target_addrlen;
                     res_nbytes += rr->_target_addrlen;
 
