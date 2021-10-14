@@ -7,8 +7,7 @@
 #include "_rebind_query.h"
 
 /* https://tools.ietf.org/html/rfc1035#section-2.3.4 */
-#define BUFLEN 512 
-#define MAX_NAME_LEN 255
+#define BUFLEN 512
 #define TTL 1
 #define NS_TTL 86400 /* 1 day */
 #define USAGE "Usage: %s [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] [-a ${PUBLIC_A}] [-A ${PUBLIC_AAAA}] [-6] [-p ${PORT}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n"

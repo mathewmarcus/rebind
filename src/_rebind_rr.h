@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <netinet/ip.h>
 
+#define MAX_NAME_LEN 255
+
 enum query_type {
     A = 0x0001,
     NS = 0x0002,

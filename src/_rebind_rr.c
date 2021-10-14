@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 
 #include "_rebind_rr.h"
+#include "_rebind_query.h"
 
 int should_reload = 0;
 
@@ -56,11 +57,11 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
 
 static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
     int num_matches;
-    char *name = NULL, qtype_str[4], *target, format_str[13];
+    char *name = NULL, qtype_str[6], *target, format_str[13];
     enum query_type qtype;
     size_t target_len;
 
-    if ((num_matches = fscanf(file, "%4[^,],", qtype_str)) == EOF) {
+    if ((num_matches = fscanf(file, "%5[^,],", qtype_str)) == EOF) {
         if (ferror(file)) {
             fprintf(stderr, "{\"message\": \"Read error from resource record file\", \"error\": \"%s\", \"format_str\": \"%s\"}\n", strerror(errno), format_str);
             return -1;
@@ -80,6 +81,10 @@ static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
     else if (!strcmp(qtype_str, "AAAA")) {
         qtype = AAAA;
         target_len = INET6_ADDRSTRLEN;
+    }
+    else if (!strcmp(qtype_str, "CNAME")) {
+        qtype = CNAME;
+        target_len = MAX_NAME_LEN;
     }
     else {
         fprintf(stderr, "{\"message\": \"Unsupported query type in resource record CSV file\", \"queryType\": \"%s\"}\n", qtype_str);
@@ -136,19 +141,28 @@ struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const enum
             n->_target_family = AF_INET;
             n->_target_addrlen = sizeof(struct in_addr);
             n->_target_straddrlen = INET_ADDRSTRLEN;
+            if (inet_pton(n->_target_family, target, &n->target) != 1) {
+                free(n);
+                fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"qtype\": %d, \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, strerror(errno), name, target);
+                return NULL;
+            }
             break;
         case AAAA:
             n->_target_family = AF_INET6;
             n->_target_addrlen = sizeof(struct in6_addr);
             n->_target_straddrlen = INET6_ADDRSTRLEN;
+            if (inet_pton(n->_target_family, target, &n->target) != 1) {
+                free(n);
+                fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"qtype\": %d, \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, strerror(errno), name, target);
+                return NULL;
+            }
+            break;
+        case CNAME:
+            n->target.name = NULL;
+            n->_target_addrlen = build_labeled_record(target, (uint8_t **)&n->target);
             break;
     }
 
-    if (inet_pton(n->_target_family, target, &n->target) != 1) {
-        free(n);
-        fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"qtype\": %d, \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, strerror(errno), name, target);
-        return NULL;
-    }
     n->name = name;
     n->sent_num_valid = 0;
     n->next = NULL;
