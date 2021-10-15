@@ -213,7 +213,7 @@ struct rr *find_subdomain_rr(const char *name, const size_t len, const enum quer
 struct rr *find_rr(const char *query_name, const size_t query_name_len, const size_t base_name_len, const enum query_type qtype, struct rr *root) {
     char *domain;
 
-    if (!strcasecmp(query_name, root->name))
+    if (!strcasecmp(query_name, root->name) && root->qtype == qtype)
         return root;
     
     if (!(domain = strcasestr(query_name, root->name))) {
