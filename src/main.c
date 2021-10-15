@@ -17,11 +17,11 @@
 int main(int argc, char *argv[]) {
     int sock, err, addr_family = AF_INET;
     struct addrinfo hints = {0}, *res = NULL;
-    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *port = "domain", *target_str, *public_target_str, public_target_a_str[INET_ADDRSTRLEN], public_target_aaaa_str[INET6_ADDRSTRLEN];
+    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *private_target, *port = "domain", *target_str, *public_target_str, public_target_a_str[INET_ADDRSTRLEN], public_target_aaaa_str[INET6_ADDRSTRLEN], *public_target_cname_str = NULL;
     in_port_t bind_port, remote_port;
-    size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN;
+    size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN, target_addrlen, public_cname_addrlen = 0;
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
-    uint8_t query_buf[BUFLEN], res_buf[BUFLEN], *query_ptr, *res_ptr, *base_name_label, *record_data_ptr;
+    uint8_t query_buf[BUFLEN], res_buf[BUFLEN], *query_ptr, *res_ptr, *base_name_label, *record_data_ptr, *public_cname = NULL;
     uint16_t message_ref;
     uint32_t ttl = 0, valid_response_count = 1;
     struct sockaddr *addr;
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     }
 
     opterr = 0;
-    while((err = getopt(argc, argv, "c:t:6a:A:p:")) != -1) {
+    while((err = getopt(argc, argv, "c:t:6a:A:p:C:")) != -1) {
         switch(err) {
             case 'c':
                 if (!sscanf(optarg, "%u", &valid_response_count)) {
@@ -76,6 +76,13 @@ int main(int argc, char *argv[]) {
                 break;
             case 'p':
                 port = optarg;
+                break;
+            case 'C':
+                public_target_cname_str = optarg;
+                if ((public_cname_addrlen = build_labeled_record(public_target_cname_str, &public_cname)) == -1) {
+                    fprintf(stderr, "{\"message\": \"Failed to parse public CNAME target\", \"public_cname\": \"%s\"}\n", public_target_cname_str);
+                    return 1;
+                }
                 break;
             case '?':
             default:
@@ -332,67 +339,68 @@ int main(int argc, char *argv[]) {
         } else {
             fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
 
-            public_target = rr->qtype == AAAA ? (char *) &public_aaaa : (char *) &public_a;
-            public_target_str = rr->qtype == AAAA ? public_target_aaaa_str : public_target_a_str;
-
-            // Compression label
-
-            switch (rr->qtype) {
+            switch (rr->qtype){
                 case A:
-                case AAAA:
-                    res_hdr->ancount = htons(0x0001);
-                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
-                    record_data_ptr = (uint8_t *)&message_ref;
-                    record_len = 2;
-                    memcpy(res_ptr, record_data_ptr, record_len);
-                    res_ptr += record_len;
-                    res_nbytes += record_len;
-                    *((uint16_t *)res_ptr) = htons(rr->qtype);
-                    res_ptr +=2;
-                    res_nbytes += 2;
-                    *((uint16_t *)res_ptr) = htons(0x0001);
-                    res_ptr +=2;
-                    res_nbytes += 2;
-                    *((uint32_t *)res_ptr) = htonl(rr->ttl);
-                    res_ptr += 4;
-                    res_nbytes += 4;
-                    *((uint16_t *)res_ptr) = htons(rr->_target_addrlen);
-                    res_ptr +=2 ;
-                    res_nbytes += 2;
-
-                    fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
-                    if (rr->sent_num_valid == valid_response_count) {
-                        memcpy(res_ptr, &rr->target, rr->_target_addrlen);
-                        target_str = rr->target_str;
-                        //inet_ntop(rr->_target_family, &rr->target, target_str, rr->_target_straddrlen);
-                        rr->sent_num_valid = 0;
-                    }
-                    else {
-                        memcpy(res_ptr, public_target, rr->_target_addrlen);
-                        //inet_ntop(rr->_target_family, public_target, target_str, rr->_target_straddrlen);
-                        target_str = public_target_str;
-                        rr->sent_num_valid++;
-                    }
-                    fprintf(stderr, " \"answer\": \"%s\",", target_str);
-                    res_ptr += rr->_target_addrlen;
-                    res_nbytes += rr->_target_addrlen;
-
-                    message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
-                    record_data_ptr = (uint8_t *)&message_ref;
+                    public_target = (char *) &public_a;
+                    public_target_str = public_target_a_str;
+                    target_addrlen = rr->_target_addrlen;
+                    private_target = (char *) &rr->target;
                     break;
-                /* TODO
                 case AAAA:
+                    public_target = (char *) &public_aaaa;
+                    public_target_str = public_target_aaaa_str;
+                    target_addrlen = rr->_target_addrlen;
+                    private_target = (char *) &rr->target;
                     break;
                 case CNAME:
+                    public_target = public_cname;
+                    public_target_str = public_target_cname_str;
+                    target_addrlen = rr->sent_num_valid == valid_response_count ? rr->_target_addrlen : public_cname_addrlen;
+                    private_target = rr->target.name;
                     break;
-                case NS:
-                    break; 
-                */
                 default:
                     res_hdr->rcode = rcode_name_error;
                     fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qtype\": \"%hu\"}\n", ntohs(*((uint16_t *)query_ptr)));
                     goto authoritative_rr;
             }
+
+            res_hdr->ancount = htons(0x0001);
+            message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
+            record_data_ptr = (uint8_t *)&message_ref;
+            record_len = 2;
+            memcpy(res_ptr, record_data_ptr, record_len);
+            res_ptr += record_len;
+            res_nbytes += record_len;
+            *((uint16_t *)res_ptr) = htons(rr->qtype);
+            res_ptr +=2;
+            res_nbytes += 2;
+            *((uint16_t *)res_ptr) = htons(0x0001);
+            res_ptr +=2;
+            res_nbytes += 2;
+            *((uint32_t *)res_ptr) = htonl(rr->ttl);
+            res_ptr += 4;
+            res_nbytes += 4;
+            *((uint16_t *)res_ptr) = htons(target_addrlen);
+            res_ptr +=2 ;
+            res_nbytes += 2;
+
+            fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
+            if (rr->sent_num_valid == valid_response_count) {
+                memcpy(res_ptr, private_target, target_addrlen);
+                target_str = rr->target_str;
+                rr->sent_num_valid = 0;
+            }
+            else {
+                memcpy(res_ptr, public_target, target_addrlen);
+                target_str = public_target_str;
+                rr->sent_num_valid++;
+            }
+            fprintf(stderr, " \"answer\": \"%s\",", target_str);
+            res_ptr += target_addrlen;
+            res_nbytes += target_addrlen;
+
+            message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
+            record_data_ptr = (uint8_t *)&message_ref;
         }
         fprintf(stderr, " \"qtype\": \"%hu\",", htons(*((uint16_t *)query_ptr)));
         query_ptr += 2;

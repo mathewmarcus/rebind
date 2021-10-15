@@ -202,7 +202,6 @@ struct rr *find_subdomain_rr(const char *name, const size_t len, const enum quer
         free_rr_list(root->next);
         free(root->name);
         root->name = NULL;
-        fprintf(stderr, "Freeing target_str %p: %1$s\n", root->target_str);
         free(root->target_str);
         root->target_str = NULL;
         free(root);
