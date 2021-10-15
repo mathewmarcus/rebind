@@ -333,75 +333,78 @@ int main(int argc, char *argv[]) {
         
         query_ptr += (1 + nbytes + 1); /* skip past the trailing null byte*/
         if (!(rr = find_rr(query_name + 1, nbytes, base_name_len, ntohs(*((uint16_t *)query_ptr)), rr_list))) {
-            fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": %d}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
-            res_hdr->rcode = rcode_name_error;
-            goto authoritative_rr;
-        } else {
-            fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
-
-            switch (rr->qtype){
-                case A:
-                    public_target = (char *) &public_a;
-                    public_target_str = public_target_a_str;
-                    target_addrlen = rr->_target_addrlen;
-                    private_target = (char *) &rr->target;
-                    break;
-                case AAAA:
-                    public_target = (char *) &public_aaaa;
-                    public_target_str = public_target_aaaa_str;
-                    target_addrlen = rr->_target_addrlen;
-                    private_target = (char *) &rr->target;
-                    break;
-                case CNAME:
-                    public_target = public_cname;
-                    public_target_str = public_target_cname_str;
-                    target_addrlen = rr->sent_num_valid == valid_response_count ? rr->_target_addrlen : public_cname_addrlen;
-                    private_target = rr->target.name;
-                    break;
-                default:
-                    res_hdr->rcode = rcode_name_error;
-                    fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qtype\": \"%hu\"}\n", ntohs(*((uint16_t *)query_ptr)));
-                    goto authoritative_rr;
+            /* If we don't find the A/AAAA record, look for a CNAME record */
+            if (ntohs(*((uint16_t *)query_ptr)) == CNAME || !(rr = find_rr(query_name + 1, nbytes, base_name_len, CNAME, rr_list))) {
+                fprintf(stderr, " \"message\": \"Invalid DNS query: name error\", \"query_name\": \"%s\", \"base_name\": \"%s\", \"qtype\": %d}\n", query_name + 1, rr_list->name, ntohs(*((uint16_t *)query_ptr)));
+                res_hdr->rcode = rcode_name_error;
+                goto authoritative_rr;
             }
-
-            res_hdr->ancount = htons(0x0001);
-            message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
-            record_data_ptr = (uint8_t *)&message_ref;
-            record_len = 2;
-            memcpy(res_ptr, record_data_ptr, record_len);
-            res_ptr += record_len;
-            res_nbytes += record_len;
-            *((uint16_t *)res_ptr) = htons(rr->qtype);
-            res_ptr +=2;
-            res_nbytes += 2;
-            *((uint16_t *)res_ptr) = htons(0x0001);
-            res_ptr +=2;
-            res_nbytes += 2;
-            *((uint32_t *)res_ptr) = htonl(rr->ttl);
-            res_ptr += 4;
-            res_nbytes += 4;
-            *((uint16_t *)res_ptr) = htons(target_addrlen);
-            res_ptr +=2 ;
-            res_nbytes += 2;
-
-            fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
-            if (rr->sent_num_valid == valid_response_count) {
-                memcpy(res_ptr, private_target, target_addrlen);
-                target_str = rr->target_str;
-                rr->sent_num_valid = 0;
-            }
-            else {
-                memcpy(res_ptr, public_target, target_addrlen);
-                target_str = public_target_str;
-                rr->sent_num_valid++;
-            }
-            fprintf(stderr, " \"answer\": \"%s\",", target_str);
-            res_ptr += target_addrlen;
-            res_nbytes += target_addrlen;
-
-            message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
-            record_data_ptr = (uint8_t *)&message_ref;
         }
+        fprintf(stderr, " \"domain_name\": \"%s\",", query_name);
+
+        switch (rr->qtype){
+            case A:
+                public_target = (char *) &public_a;
+                public_target_str = public_target_a_str;
+                target_addrlen = rr->_target_addrlen;
+                private_target = (char *) &rr->target;
+                break;
+            case AAAA:
+                public_target = (char *) &public_aaaa;
+                public_target_str = public_target_aaaa_str;
+                target_addrlen = rr->_target_addrlen;
+                private_target = (char *) &rr->target;
+                break;
+            case CNAME:
+                public_target = public_cname;
+                public_target_str = public_target_cname_str;
+                target_addrlen = rr->sent_num_valid == valid_response_count ? rr->_target_addrlen : public_cname_addrlen;
+                private_target = rr->target.name;
+                break;
+            default:
+                res_hdr->rcode = rcode_name_error;
+                fprintf(stderr, " \"message\": \"Invalid DNS query: not implemented\", \"qtype\": \"%hu\"}\n", ntohs(*((uint16_t *)query_ptr)));
+                goto authoritative_rr;
+        }
+
+        res_hdr->ancount = htons(0x0001);
+        message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr));
+        record_data_ptr = (uint8_t *)&message_ref;
+        record_len = 2;
+        memcpy(res_ptr, record_data_ptr, record_len);
+        res_ptr += record_len;
+        res_nbytes += record_len;
+        *((uint16_t *)res_ptr) = htons(rr->qtype);
+        res_ptr +=2;
+        res_nbytes += 2;
+        *((uint16_t *)res_ptr) = htons(0x0001);
+        res_ptr +=2;
+        res_nbytes += 2;
+        *((uint32_t *)res_ptr) = htonl(rr->ttl);
+        res_ptr += 4;
+        res_nbytes += 4;
+        *((uint16_t *)res_ptr) = htons(target_addrlen);
+        res_ptr +=2 ;
+        res_nbytes += 2;
+
+        fprintf(stderr, " \"is_reserved\": %d,", rr->sent_num_valid);
+        if (rr->sent_num_valid == valid_response_count) {
+            memcpy(res_ptr, private_target, target_addrlen);
+            target_str = rr->target_str;
+            rr->sent_num_valid = 0;
+        }
+        else {
+            memcpy(res_ptr, public_target, target_addrlen);
+            target_str = public_target_str;
+            rr->sent_num_valid++;
+        }
+        fprintf(stderr, " \"answer\": \"%s\",", target_str);
+        res_ptr += target_addrlen;
+        res_nbytes += target_addrlen;
+
+        message_ref = htons(((3 << 6) << 8) | sizeof(struct dns_hdr) + rr->subdomain_len);
+        record_data_ptr = (uint8_t *)&message_ref;
+
         fprintf(stderr, " \"qtype\": \"%hu\",", htons(*((uint16_t *)query_ptr)));
         query_ptr += 2;
 
