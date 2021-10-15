@@ -3,3 +3,4 @@ A,two,192.168.0.1
 A,three,169.254.169.254
 AAAA,four,::1
 A,five,127.0.0.2
+CNAME,six,admin.internal.corp

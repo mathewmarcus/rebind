@@ -6,39 +6,40 @@
 #include <arpa/inet.h>
 
 #include "_rebind_rr.h"
+#include "_rebind_query.h"
 
 int should_reload = 0;
 
 
-static struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const enum query_type qtype);
-static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const enum query_type qtype);
+static struct rr *new_rr(char *name, char *target, const uint32_t ttl, const enum query_type qtype);
+static int add_rr(struct rr *root, char *name, char *target, const uint32_t ttl, const enum query_type qtype);
 static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list);
 
 void set_reload_flag(int signal) {
     should_reload = 1;
 }
 
-int reload_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, uint32_t ttl, struct rr **rr_list) {
+int reload_resource_records(const char *filename, const int ai_family, char *domain, char *host_ip, uint32_t ttl, struct rr **rr_list) {
     free_rr_list(*rr_list);
 
     return load_resource_records(filename, ai_family, domain, host_ip, ttl, rr_list);
 }
 
-int load_resource_records(const char *filename, const int ai_family, char *domain, const char *host_ip, uint32_t ttl, struct rr **rr_list) {
+int load_resource_records(const char *filename, const int ai_family, char *domain, char *host_ip, uint32_t ttl, struct rr **rr_list) {
     FILE *f;
     int ret;
     enum query_type qtype;
 
     qtype = ai_family == AF_INET6 ? AAAA : A;
 
-    if (!(*rr_list = new_rr(strdup(domain), host_ip, 60, qtype))) /* Put base domain in front of list */
+    if (!(*rr_list = new_rr(strdup(domain), strdup(host_ip), 60, qtype))) /* Put base domain in front of list */
         return -1;
     (*rr_list)->subdomain_len = 0;
 
-    if (add_rr(*rr_list, strdup("ns1"), host_ip, 60, qtype) == -1) /* Add ns1 (nameserver) to list */
+    if (add_rr(*rr_list, strdup("ns1"), strdup(host_ip), 60, qtype) == -1) /* Add ns1 (nameserver) to list */
         return -1;
 
-    if (add_rr(*rr_list, strdup("ns2"), host_ip, 60, qtype) == -1) /* Add ns2 (nameserver) to list */
+    if (add_rr(*rr_list, strdup("ns2"), strdup(host_ip), 60, qtype) == -1) /* Add ns2 (nameserver) to list */
         return -1;
 
 
@@ -56,11 +57,11 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
 
 static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
     int num_matches;
-    char *name = NULL, qtype_str[4], *target, format_str[13];
+    char *name = NULL, qtype_str[6], *target, format_str[13];
     enum query_type qtype;
     size_t target_len;
 
-    if ((num_matches = fscanf(file, "%4[^,],", qtype_str)) == EOF) {
+    if ((num_matches = fscanf(file, "%5[^,],", qtype_str)) == EOF) {
         if (ferror(file)) {
             fprintf(stderr, "{\"message\": \"Read error from resource record file\", \"error\": \"%s\", \"format_str\": \"%s\"}\n", strerror(errno), format_str);
             return -1;
@@ -80,6 +81,10 @@ static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
     else if (!strcmp(qtype_str, "AAAA")) {
         qtype = AAAA;
         target_len = INET6_ADDRSTRLEN;
+    }
+    else if (!strcmp(qtype_str, "CNAME")) {
+        qtype = CNAME;
+        target_len = MAX_NAME_LEN;
     }
     else {
         fprintf(stderr, "{\"message\": \"Unsupported query type in resource record CSV file\", \"queryType\": \"%s\"}\n", qtype_str);
@@ -118,12 +123,11 @@ static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
         }
         fprintf(stderr, "{\"message\": \"Added resource record to list\", \"qtype\": %d, \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, name, target);
 
-        free(target);
         return read_resource_records(file, ttl, rr_list);
     }
 }
 
-struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const enum query_type qtype) {
+struct rr *new_rr(char *name, char *target, const uint32_t ttl, const enum query_type qtype) {
     struct rr *n;
 
     if (!(n = malloc(sizeof(struct rr)))) {
@@ -136,31 +140,41 @@ struct rr *new_rr(char *name, const char *target, const uint32_t ttl, const enum
             n->_target_family = AF_INET;
             n->_target_addrlen = sizeof(struct in_addr);
             n->_target_straddrlen = INET_ADDRSTRLEN;
+            if (inet_pton(n->_target_family, target, &n->target) != 1) {
+                free(n);
+                fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"qtype\": %d, \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, strerror(errno), name, target);
+                return NULL;
+            }
             break;
         case AAAA:
             n->_target_family = AF_INET6;
             n->_target_addrlen = sizeof(struct in6_addr);
             n->_target_straddrlen = INET6_ADDRSTRLEN;
+            if (inet_pton(n->_target_family, target, &n->target) != 1) {
+                free(n);
+                fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"qtype\": %d, \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, strerror(errno), name, target);
+                return NULL;
+            }
+            break;
+        case CNAME:
+            n->target.name = NULL;
+            n->_target_addrlen = build_labeled_record(target, (uint8_t **)&n->target);
             break;
     }
 
-    if (inet_pton(n->_target_family, target, &n->target) != 1) {
-        free(n);
-        fprintf(stderr, "{\"message\": \"Failed to convert IP from net to ASCII\", \"qtype\": %d, \"error\": \"%s\", \"name\": \"%s\", \"target\": \"%s\"}\n", qtype, strerror(errno), name, target);
-        return NULL;
-    }
     n->name = name;
     n->sent_num_valid = 0;
     n->next = NULL;
     n->subdomain_len = strlen(name) + 1;
     n->ttl = ttl;
     n->qtype = qtype;
+    n->target_str = target;
     return n;
 }
 
 
 /* This is idempotent */
-static int add_rr(struct rr *root, char *name, const char *target, const uint32_t ttl, const enum query_type qtype) {
+static int add_rr(struct rr *root, char *name, char *target, const uint32_t ttl, const enum query_type qtype) {
     struct rr *n;
 
     if (!root->next) { /* We've reached the end of the list, add the new resource record */
@@ -188,6 +202,8 @@ struct rr *find_subdomain_rr(const char *name, const size_t len, const enum quer
         free_rr_list(root->next);
         free(root->name);
         root->name = NULL;
+        free(root->target_str);
+        root->target_str = NULL;
         free(root);
         root = NULL;
     }
@@ -197,7 +213,7 @@ struct rr *find_subdomain_rr(const char *name, const size_t len, const enum quer
 struct rr *find_rr(const char *query_name, const size_t query_name_len, const size_t base_name_len, const enum query_type qtype, struct rr *root) {
     char *domain;
 
-    if (!strcasecmp(query_name, root->name))
+    if (!strcasecmp(query_name, root->name) && root->qtype == qtype)
         return root;
     
     if (!(domain = strcasestr(query_name, root->name))) {
