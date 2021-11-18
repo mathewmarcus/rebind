@@ -15,7 +15,7 @@
 
 
 int main(int argc, char *argv[]) {
-    int sock, err, addr_family = AF_INET;
+    int sock, err, addr_family = AF_INET, privileged_port;
     struct addrinfo hints = {0}, *res = NULL;
     char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *private_target, *port = "domain", *target_str, *public_target_str, public_target_a_str[INET_ADDRSTRLEN], public_target_aaaa_str[INET6_ADDRSTRLEN], *public_target_cname_str = NULL;
     in_port_t bind_port, remote_port;
@@ -128,11 +128,13 @@ int main(int argc, char *argv[]) {
         inet_ntop(res->ai_family, &((struct sockaddr_in * ) res->ai_addr)->sin_addr, bind_addr, res->ai_addrlen);
         bind_port = ntohs(((struct sockaddr_in * ) res->ai_addr)->sin_port);
         host_qtype = A;
+        privileged_port = ((struct sockaddr_in * ) res->ai_addr)->sin_port < 1024;
     }
     else if (res->ai_family == AF_INET6) {
         inet_ntop(res->ai_family, &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr, bind_addr, res->ai_addrlen);
         bind_port = ntohs(((struct sockaddr_in6 * ) res->ai_addr)->sin6_port);
         host_qtype = AAAA;
+        privileged_port = ((struct sockaddr_in6 * ) res->ai_addr)->sin6_port < 1024;
     }
     else {
         fprintf(stderr, "{\"message\": \"Unsupported address type family returned from getaddrinfo()\", \"ai_family\": \"%d\"}\n", res->ai_family);
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) {
     addrlen = res->ai_addrlen;
 
     #ifdef CAP_FOUND
-    if (raise_privs()) {
+    if (privileged_port && raise_privs()) {
         freeaddrinfo(res);
         close(sock);
         return 1;
@@ -161,7 +163,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "{\"message\": \"Successfully bound server socket to address\", \"ip\": \"%s\", \"port\": %hu, \"fd\": %d}\n", bind_addr, bind_port, sock);
     freeaddrinfo(res);
 
-    if (drop_privs()) {
+    if (privileged_port && drop_privs()) {
         close(sock);
         return 1;
     }
