@@ -57,7 +57,7 @@ int load_resource_records(const char *filename, const int ai_family, char *domai
 
 static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
     int num_matches;
-    char *name = NULL, qtype_str[6], *target, format_str[13];
+    char *name = NULL, qtype_str[6], *target, format_str[14];
     enum query_type qtype;
     size_t target_len;
 
@@ -96,9 +96,7 @@ static int read_resource_records(FILE *file, uint32_t ttl, struct rr *rr_list) {
         return -1;
     }
 
-    snprintf(format_str, 13, "%%m[^,],%%%ds\n", target_len);
-    format_str[12] = '\0';
-
+    snprintf(format_str, 14, "%%m[^,],%%%ds\n", target_len);
     if ((num_matches = fscanf(file, format_str, &name, target)) == EOF) {
         if (ferror(file)) {
             fprintf(stderr, "{\"message\": \"Read error from resource record file\", \"error\": \"%s\", \"format_str\": \"%s\"}\n", strerror(errno), format_str);
