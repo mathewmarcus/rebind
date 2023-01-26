@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(rebind VERSION 0.1.0)
+project(rebind VERSION 0.1.0 LANGUAGES C)
 
 find_file(CAP_H sys/capability.h)
 find_library(LIBCAP libcap.so)
