@@ -1,0 +1,7 @@
+[Unit]
+Description=rebind DNS server
+
+[Service]
+EnvironmentFile=/run/rebind.env
+ExecStart=rebind -a ${REBIND_PUBLIC_IPV4} -C ${REBIND_PUBLIC_CNAME} ${REBIND_DOMAIN} /var/rebind/zone.csv ${REBIND_HOST_IP}
+ExecReload=kill -s SIGHUP $MAINPID
