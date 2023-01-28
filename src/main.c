@@ -17,7 +17,7 @@
 int main(int argc, char *argv[]) {
     int sock, err, addr_family = AF_INET, privileged_port;
     struct addrinfo hints = {0}, *res = NULL;
-    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *private_target, *port = "domain", *target_str, *public_target_str, public_target_a_str[INET_ADDRSTRLEN], public_target_aaaa_str[INET6_ADDRSTRLEN], *public_target_cname_str = NULL;
+    char query_name[MAX_NAME_LEN], *bind_addr, *remote_addr, *public_target, *private_target, *port = "domain", *target_str, *public_target_str, public_target_a_str[INET_ADDRSTRLEN + 1], public_target_aaaa_str[INET6_ADDRSTRLEN + 1], *public_target_cname_str = NULL, *iface_name = NULL, *iface_addr = NULL;
     in_port_t bind_port, remote_port;
     size_t ai_addrlen = sizeof(struct in_addr), str_addrlen = INET_ADDRSTRLEN, target_addrlen, public_cname_addrlen = 0;
     ssize_t nbytes, res_nbytes, base_name_label_len, record_len, base_name_len;
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     }
 
     opterr = 0;
-    while((err = getopt(argc, argv, "c:t:6a:A:p:C:")) != -1) {
+    while((err = getopt(argc, argv, "c:t:6a:A:p:C:i:")) != -1) {
         switch(err) {
             case 'c':
                 if (!sscanf(optarg, "%u", &valid_response_count)) {
@@ -84,6 +84,9 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
                 break;
+            case 'i':
+                iface_name = optarg;
+                break;
             case '?':
             default:
                 fprintf(stderr, USAGE, argv[0]);
@@ -99,9 +102,9 @@ int main(int argc, char *argv[]) {
     inet_ntop(AF_INET, &public_a, public_target_a_str, INET_ADDRSTRLEN);
     inet_ntop(AF_INET6, &public_aaaa, public_target_aaaa_str, INET6_ADDRSTRLEN);
 
-    if (!(bind_addr = malloc(str_addrlen)))
+    if (!(bind_addr = malloc(str_addrlen + 1)))
         return 1;
-    if (!(remote_addr = malloc(str_addrlen))) {
+    if (!(remote_addr = malloc(str_addrlen + 1))) {
         free(bind_addr);
         return 1;
     }
@@ -115,23 +118,27 @@ int main(int argc, char *argv[]) {
     }
     fprintf(stderr, "{\"message\": \"Successfully created server socket\", \"fd\": %d}\n", sock);
 
+    if (iface_name && get_interface_addr(sock, iface_name, addr_family, &iface_addr) == -1) {
+        return 1;
+    }
+
     hints.ai_family = addr_family,
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
     fprintf(stderr, "{\"message\": \"Retrieving bind address...\"}\n");
-    if ((err = getaddrinfo(NULL, port, &hints, &res))) {
+    if ((err = getaddrinfo(iface_addr, port, &hints, &res))) {
         fprintf(stderr, "{\"message\": \"Failed to retrieve bind address\", \"error\": \"%d\"}\n", err);
         close(sock);
         return 1;
     }
     if (res->ai_family == AF_INET) {
-        inet_ntop(res->ai_family, &((struct sockaddr_in * ) res->ai_addr)->sin_addr, bind_addr, res->ai_addrlen);
+        inet_ntop(res->ai_family, &((struct sockaddr_in * ) res->ai_addr)->sin_addr, bind_addr, str_addrlen);
         bind_port = ntohs(((struct sockaddr_in * ) res->ai_addr)->sin_port);
         host_qtype = A;
         privileged_port = ((struct sockaddr_in * ) res->ai_addr)->sin_port < 1024;
     }
     else if (res->ai_family == AF_INET6) {
-        inet_ntop(res->ai_family, &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr, bind_addr, res->ai_addrlen);
+        inet_ntop(res->ai_family, &((struct sockaddr_in6 *)res->ai_addr)->sin6_addr, bind_addr, str_addrlen);
         bind_port = ntohs(((struct sockaddr_in6 * ) res->ai_addr)->sin6_port);
         host_qtype = AAAA;
         privileged_port = ((struct sockaddr_in6 * ) res->ai_addr)->sin6_port < 1024;
@@ -238,11 +245,11 @@ int main(int argc, char *argv[]) {
 
         switch (addr_family) {
             case AF_INET:
-                inet_ntop(addr_family, &((struct sockaddr_in * ) addr)->sin_addr, remote_addr, recv_addrlen);
+                inet_ntop(addr_family, &((struct sockaddr_in * ) addr)->sin_addr, remote_addr, str_addrlen);
                 remote_port = ntohs(((struct sockaddr_in * ) addr)->sin_port);
                 break;
             case AF_INET6:
-                inet_ntop(addr_family, &((struct sockaddr_in6 * ) addr)->sin6_addr, remote_addr, recv_addrlen);
+                inet_ntop(addr_family, &((struct sockaddr_in6 * ) addr)->sin6_addr, remote_addr, str_addrlen);
                 remote_port = ntohs(((struct sockaddr_in6 * ) addr)->sin6_port);
                 break;
         }

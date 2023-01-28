@@ -10,7 +10,7 @@
 #define BUFLEN 512
 #define TTL 1
 #define NS_TTL 86400 /* 1 day */
-#define USAGE "Usage: %s [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] [-a ${PUBLIC_A}] [-A ${PUBLIC_AAAA}] [-C ${PUBLIC_CNAME}] [-6] [-p ${PORT}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n"
+#define USAGE "Usage: %s [-c ${VALID_RESPONSE_COUNT}] [-t ${TTL}] [-a ${PUBLIC_A}] [-A ${PUBLIC_AAAA}] [-C ${PUBLIC_CNAME}] [-6] [-p ${PORT}] [-i ${inteface}] ${DOMAIN_NAME} ${FILENAME} ${HOST_IP}\n"
 
 enum msg_type {
     msg_query = 0x00,

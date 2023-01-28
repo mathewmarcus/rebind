@@ -51,6 +51,7 @@ $ sudo make install
 * `-A`: public AAAA record target (default `::`)
 * `-C`: public CNAME record target
 * `-p`: alternative UDP port on which to listen for DNS requests (default `53`)
+* `-i`: interface on which to listen (default is to listen on `0.0.0.0`)
 
 ### Running
 1. Create a CSV file of the form `qtype,subdomain,reservedIP`. An example of such a file is `example.csv`
