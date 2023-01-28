@@ -16,6 +16,7 @@ configure_file(src/_rebind_privs.h.in ${CMAKE_SOURCE_DIR}/src/_rebind_privs.h @O
 add_library(_rebind_rr OBJECT src/_rebind_rr.h src/_rebind_rr.c)
 add_library(_rebind_privs OBJECT src/_rebind_privs.h src/_rebind_privs.c)
 add_library(_rebind_query OBJECT src/_rebind_query.h src/_rebind_query.c)
+add_library(_rebind OBJECT src/rebind.h src/_rebind.c)
 
 add_executable(rebind src/main.c)
 
@@ -23,7 +24,7 @@ if (${CMAKE_BUILD_TYPE} AND ${CMAKE_BUILD_TYPE} STREQUAL "Release")
     target_link_options(rebind PRIVATE "-s")
 endif()
 
-target_link_libraries(rebind m _rebind_rr _rebind_privs _rebind_query)
+target_link_libraries(rebind m _rebind_rr _rebind_privs _rebind_query _rebind)
 
 if (CAP_FOUND)
     target_link_libraries(rebind ${LIBCAP})

@@ -52,4 +52,6 @@ struct dns_hdr {
     uint16_t nscount;
     uint16_t arcount;
 };
+
+int get_interface_addr(int socket, char *iface_name, int addr_family, char **addr);
 #endif
